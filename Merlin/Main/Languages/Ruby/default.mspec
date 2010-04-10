@@ -12,4 +12,4 @@
 #
 #
 # ****************************************************************************
-load "#{ENV['MERLIN_ROOT']}\\..\\External.LCA_RESTRICTED\\Languages\\IronRuby\\mspec\\default.mspec"
+load File.join("#{ENV['MERLIN_ROOT']}","..","External.LCA_RESTRICTED","Languages","IronRuby","mspec","default.mspec")
