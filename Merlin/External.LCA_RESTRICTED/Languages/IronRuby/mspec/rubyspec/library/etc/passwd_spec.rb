@@ -4,13 +4,13 @@ require 'etc'
 
 describe "Etc.passwd" do
   if RUBY_PLATFORM =~ /(mswin|mingw|bccwin|wince)/i then
-    it_behaves_like(:etc_on_windows, :getpwent)
+    it_behaves_like(:etc_on_windows, :passwd)
   else
 
     before(:all) do
-      @etc_passwd = `cat /etc/passwd`.chomp.split('\n')
-        .map { |s| s.split(':') }
-        .map { |e| Struct::Passwd.new(e[0],e[1],e[2].to_i,e[3].to_i,e[4],e[5],e[6]) }
+      @etc_passwd = `cat /etc/passwd`.chomp.split("\n").
+        map { |s| s.split(':') }.
+        map { |e| Struct::Passwd.new(e[0],e[1],e[2].to_i,e[3].to_i,e[4],e[5],e[6]) }
     end
 
     before(:each) do
@@ -44,24 +44,24 @@ describe "Etc.passwd" do
       expected = @etc_passwd.length
       actual = 0
       Etc.passwd { |pw| actual += 1 }
-      count.should == expected
+      actual.should == expected
     end
 
     it "should reset the file for reading when a block is passed" do
       expected = @etc_passwd.first
       Etc.passwd
       actual = nil
-      Etc.passwd { |pw| actual = pw if pw.nil? }
+      Etc.passwd { |pw| actual = pw if actual.nil? }
       actual.uid.should == expected.uid
     end
 
     it "should reset the file for reading again after a block is passed" do
-      expected = @etc_passwd.first
+      expected = @etc_passwd.at(1)
       last = nil
       Etc.passwd { |pw| last = pw unless pw.nil? }
       actual = Etc.passwd
       actual.uid.should == expected.uid
-      last.uid.should == @etc_passwd.last
+      last.uid.should == @etc_passwd.last.uid
     end
 
   end
