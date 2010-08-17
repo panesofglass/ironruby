@@ -2,11 +2,11 @@
  *
  * Copyright (c) Microsoft Corporation. 
  *
- * This source code is subject to terms and conditions of the Microsoft Public License. A 
+ * This source code is subject to terms and conditions of the Apache License, Version 2.0. A 
  * copy of the license can be found in the License.html file at the root of this distribution. If 
- * you cannot locate the  Microsoft Public License, please send an email to 
+ * you cannot locate the  Apache License, Version 2.0, please send an email to 
  * ironruby@microsoft.com. By using this source code in any fashion, you are agreeing to be bound 
- * by the terms of the Microsoft Public License.
+ * by the terms of the Apache License, Version 2.0.
  *
  * You must not remove this notice, or any other, from this software.
  *
@@ -76,60 +76,6 @@ foo
 ");
             });
         }
-
-        // Fixnum doesn't have identity in Ruby
-        public void InstanceVariables1() {
-            AssertOutput(delegate() {
-                CompilerTest(@"
-class Fixnum
-  def foo= a
-    @x = a
-  end
-  def foo
-    @x
-  end
-end
-
-a = 1
-b = 1
-c = 2
-
-a.foo = 1
-b.foo = 2
-c.foo = 3
-puts a.foo, b.foo, c.foo
-");
-            },
-            @"
-2
-2
-3");
-        }
-
-        // Float has an identity in Ruby
-        public void InstanceVariables2() {
-            TestOutput(@"
-class Float
-  def foo= a
-    @x = a
-  end
-  def foo
-    @x
-  end
-end
-
-a = 1.0
-b = 1.0
-
-a.foo = 1
-b.foo = 2
-puts a.foo, b.foo
-",@"
-1
-2
-");
-        }
-
 
         public void Scenario_RubyParams1() {
             AssertOutput(delegate() {

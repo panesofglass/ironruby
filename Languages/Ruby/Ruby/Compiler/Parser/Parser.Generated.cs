@@ -2,11 +2,11 @@
  *
  * Copyright (c) Microsoft Corporation. 
  *
- * This source code is subject to terms and conditions of the Microsoft Public License. A 
+ * This source code is subject to terms and conditions of the Apache License, Version 2.0. A 
  * copy of the license can be found in the License.html file at the root of this distribution. If 
- * you cannot locate the  Microsoft Public License, please send an email to 
+ * you cannot locate the  Apache License, Version 2.0, please send an email to 
  * ironruby@microsoft.com. By using this source code in any fashion, you are agreeing to be bound 
- * by the terms of the Microsoft Public License.
+ * by the terms of the Apache License, Version 2.0.
  *
  * You must not remove this notice, or any other, from this software.
  *
@@ -2002,7 +2002,7 @@ public partial class Parser
                     _tokenizer.ReportError(Errors.FileInitializerInMethod);
                 }
                             
-                EnterTopScope();
+                EnterFileInitializerScope();
             }
   }
 
@@ -4327,7 +4327,7 @@ public partial class Parser
       // @16 -> 
 #line 1344 "Parser.y"
 			{                
-            EnterTopScope();
+            EnterClassDefinitionScope();
         }
   }
 
@@ -4361,7 +4361,7 @@ public partial class Parser
 			{
             yyval.Integer1 = _inSingletonMethodDefinition;
             _inSingletonMethodDefinition = 0;
-            EnterTopScope();
+            EnterSingletonClassDefinitionScope();
         }
   }
 
@@ -4381,7 +4381,7 @@ public partial class Parser
       // @19 -> 
 #line 1373 "Parser.y"
 			{
-            EnterTopScope();
+            EnterModuleDefinitionScope();
         }
   }
 
@@ -4404,7 +4404,7 @@ public partial class Parser
 #line 1385 "Parser.y"
 			{
             _inInstanceMethodDefinition++;
-            EnterTopScope();
+            EnterMethodDefinitionScope();
         }
   }
 
@@ -4435,7 +4435,7 @@ public partial class Parser
 			{
             _inSingletonMethodDefinition++;
             _tokenizer.LexicalState = LexicalState.EXPR_END;
-            EnterTopScope();
+            EnterSingletonMethodDefinitionScope();
         }
   }
 

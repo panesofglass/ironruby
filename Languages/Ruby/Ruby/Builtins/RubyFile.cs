@@ -2,11 +2,11 @@
  *
  * Copyright (c) Microsoft Corporation. 
  *
- * This source code is subject to terms and conditions of the Microsoft Public License. A 
+ * This source code is subject to terms and conditions of the Apache License, Version 2.0. A 
  * copy of the license can be found in the License.html file at the root of this distribution. If 
- * you cannot locate the  Microsoft Public License, please send an email to 
+ * you cannot locate the  Apache License, Version 2.0, please send an email to 
  * ironruby@microsoft.com. By using this source code in any fashion, you are agreeing to be bound 
- * by the terms of the Microsoft Public License.
+ * by the terms of the Apache License, Version 2.0.
  *
  * You must not remove this notice, or any other, from this software.
  *
@@ -20,16 +20,16 @@ using Microsoft.Scripting.Utils;
 
 namespace IronRuby.Builtins {
     public class RubyFile : RubyIO {
-        private readonly string _path;
+        public string Path { get; set; }
 
         public RubyFile(RubyContext/*!*/ context)
             : base(context) {
-            _path = null;
+            Path = null;
         }
 
         public RubyFile(RubyContext/*!*/ context, string/*!*/ path, IOMode mode)
             : base(context, OpenFileStream(context, path, mode), mode) {
-            _path = path;
+            Path = path;
         }
 
         public RubyFile(RubyContext/*!*/ context, MutableString/*!*/ path, IOMode mode)
@@ -38,7 +38,7 @@ namespace IronRuby.Builtins {
 
         public RubyFile(RubyContext/*!*/ context, Stream/*!*/ stream, int descriptor, IOMode mode)
             : base(context, stream, descriptor, mode) {
-            _path = null;
+            Path = null;
         }
 
         public static Stream/*!*/ OpenFileStream(RubyContext/*!*/ context, string/*!*/ path, IOMode mode) {
@@ -98,12 +98,6 @@ namespace IronRuby.Builtins {
             }
 
             return stream;
-        }
-
-        public string Path {
-            get {
-                return _path; 
-            }
         }
     }
 }

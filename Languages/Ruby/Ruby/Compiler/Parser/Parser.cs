@@ -2,11 +2,11 @@
  *
  * Copyright (c) Microsoft Corporation. 
  *
- * This source code is subject to terms and conditions of the Microsoft Public License. A 
+ * This source code is subject to terms and conditions of the Apache License, Version 2.0. A 
  * copy of the license can be found in the License.html file at the root of this distribution. If 
- * you cannot locate the  Microsoft Public License, please send an email to 
+ * you cannot locate the  Apache License, Version 2.0, please send an email to 
  * ironruby@microsoft.com. By using this source code in any fashion, you are agreeing to be bound 
- * by the terms of the Microsoft Public License.
+ * by the terms of the Apache License, Version 2.0.
  *
  * You must not remove this notice, or any other, from this software.
  *
@@ -191,12 +191,12 @@ namespace IronRuby.Compiler {
                 outer = null;
             }
 
-            return new TopLexicalScope(outer);
+            return new TopStaticLexicalScope(outer);
         }
 
         private LocalVariable/*!*/ DefineParameter(string/*!*/ name, SourceSpan location) {
             // we are in a method:
-            Debug.Assert(CurrentScope.OuterScope == null);
+            Debug.Assert(CurrentScope.IsTop && !(CurrentScope is TopStaticLexicalScope));
 
             LocalVariable variable;
             if (CurrentScope.TryGetValue(name, out variable)) {
@@ -232,7 +232,7 @@ namespace IronRuby.Compiler {
         /// <summary>
         /// Block scope.
         /// </summary>
-        private LexicalScope EnterNestedScope() {
+        private LexicalScope/*!*/ EnterNestedScope() {
             LexicalScope result = new BlockLexicalScope(CurrentScope);
             _lexicalScopes.Push(result);
             return result;
@@ -241,17 +241,56 @@ namespace IronRuby.Compiler {
         /// <summary>
         /// for-loop scope.
         /// </summary>
-        private LexicalScope EnterPaddingScope() {
+        private LexicalScope/*!*/ EnterPaddingScope() {
             LexicalScope result = new PaddingLexicalScope(CurrentScope);
             _lexicalScopes.Push(result);
             return result;
         }
 
         /// <summary>
-        /// Method, module and source unit scopes.
+        /// BEGIN block.
         /// </summary>
-        private LexicalScope EnterTopScope() {
-            LexicalScope result = new TopLexicalScope(null);
+        private LexicalScope/*!*/ EnterFileInitializerScope() {
+            LexicalScope result = new TopStaticLexicalScope(null);
+            _lexicalScopes.Push(result);
+            return result;
+        }
+
+        /// <summary>
+        /// Source unit scope.
+        /// </summary>
+        private LexicalScope/*!*/ EnterTopStaticScope() {
+            LexicalScope result = new TopStaticLexicalScope(CurrentScope);
+            _lexicalScopes.Push(result);
+            return result;
+        }
+
+        private LexicalScope/*!*/ EnterModuleDefinitionScope() {
+            LexicalScope result = new TopLocalDefinitionLexicalScope(CurrentScope);
+            _lexicalScopes.Push(result);
+            return result;
+        }
+
+        private LexicalScope/*!*/ EnterClassDefinitionScope() {
+            LexicalScope result = new ClassLexicalScope(CurrentScope);
+            _lexicalScopes.Push(result);
+            return result;
+        }
+
+        private LexicalScope/*!*/ EnterSingletonClassDefinitionScope() {
+            LexicalScope result = new TopLocalDefinitionLexicalScope(CurrentScope);
+            _lexicalScopes.Push(result);
+            return result;
+        }
+
+        private LexicalScope/*!*/ EnterMethodDefinitionScope() {
+            LexicalScope result = new MethodLexicalScope(CurrentScope);
+            _lexicalScopes.Push(result);
+            return result;
+        }
+
+        private LexicalScope/*!*/ EnterSingletonMethodDefinitionScope() {
+            LexicalScope result = new TopLocalDefinitionLexicalScope(CurrentScope);
             _lexicalScopes.Push(result);
             return result;
         }

@@ -8,8 +8,8 @@ rb      =cd /d %DLR_ROOT%\Languages\Ruby
 rt      =cd /d %DLR_ROOT%\Runtime
 r       =cd /d %DLR_ROOT%
 mspc    =cd /d %DLR_ROOT%\External.LCA_RESTRICTED\Languages\IronRuby\mspec
-ipl     =cd /d %DLR_ROOT%\External.LCA_RESTRICTED\Languages\IronPython\26\Lib
-cpl     =cd /d %DLR_ROOT%\External.LCA_RESTRICTED\Languages\CPython\26\Lib
+ipl     =cd /d %DLR_ROOT%\External.LCA_RESTRICTED\Languages\IronPython\27\Lib
+cpl     =cd /d %DLR_ROOT%\External.LCA_RESTRICTED\Languages\CPython\27\Lib
 
 irk     =cd /d %DLR_ROOT%\Hosts\IronRuby.Rack
 rbs     =cd /d %DLR_ROOT%\Languages\Ruby\Samples
@@ -75,8 +75,8 @@ rbd2    ="%DLR_ROOT%\Bin\v2Debug\ir.exe" -D $*
 rbxm    =mono "%DLR_ROOT%\Bin\Debug\ir.exe" $*
 rbrm    =mono "%DLR_ROOT%\Bin\Release\ir.exe" $*
 rbdm    =mono "%DLR_ROOT%\Bin\Debug\ir.exe" -D $*
-irb19   ="%DLR_ROOT%\External.LCA_RESTRICTED\Languages\Ruby\ruby-1.9.1p129\bin\irb.bat" $*
-ruby19  ="%DLR_ROOT%\External.LCA_RESTRICTED\Languages\Ruby\ruby-1.9.1p129\bin\ruby.exe" $*
+irb19   ="%DLR_ROOT%\External.LCA_RESTRICTED\Languages\Ruby\ruby19\bin\irb.bat" $*
+ruby19  ="%DLR_ROOT%\External.LCA_RESTRICTED\Languages\Ruby\ruby19\bin\ruby.exe" $*
 msir    =%windir%\system32\WindowsPowerShell\v1.0\powershell.exe measure-command { %DLR_ROOT%\Bin\Release\ir.exe $* }
 
 ;==============================================================================

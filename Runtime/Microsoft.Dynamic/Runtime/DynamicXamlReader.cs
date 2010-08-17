@@ -2,11 +2,11 @@
  *
  * Copyright (c) Microsoft Corporation. 
  *
- * This source code is subject to terms and conditions of the Microsoft Public License. A 
+ * This source code is subject to terms and conditions of the Apache License, Version 2.0. A 
  * copy of the license can be found in the License.html file at the root of this distribution. If 
- * you cannot locate the  Microsoft Public License, please send an email to 
+ * you cannot locate the  Apache License, Version 2.0, please send an email to 
  * dlr@microsoft.com. By using this source code in any fashion, you are agreeing to be bound 
- * by the terms of the Microsoft Public License.
+ * by the terms of the Apache License, Version 2.0.
  *
  * You must not remove this notice, or any other, from this software.
  *
@@ -32,8 +32,8 @@ namespace Microsoft.Scripting.Runtime {
         /// are bound to methods defined in the provided Scope and converted using the provided DynamicOperations
         /// object.
         /// </summary>
-        public static object LoadComponent(dynamic scope, DynamicOperations operations, Stream stream) {            
-            return LoadComponent((object)scope, operations, new XamlXmlReader(stream));
+        public static object LoadComponent(dynamic scope, DynamicOperations operations, Stream stream, XamlSchemaContext schemaContext) {
+            return LoadComponent((object)scope, operations, new XamlXmlReader(stream, schemaContext ?? new XamlSchemaContext()));
         }
 
         /// <summary>
@@ -41,9 +41,9 @@ namespace Microsoft.Scripting.Runtime {
         /// are bound to methods defined in the provided Scope and converted using the provided DynamicOperations
         /// object.
         /// </summary>
-        public static object LoadComponent(dynamic scope, DynamicOperations operations, string filename) {
+        public static object LoadComponent(dynamic scope, DynamicOperations operations, string filename, XamlSchemaContext schemaContext) {
             using (var file = new StreamReader(filename)) {
-                return LoadComponent((object)scope, operations, new XamlXmlReader(file));
+                return LoadComponent((object)scope, operations, new XamlXmlReader(file, schemaContext ?? new XamlSchemaContext()));
             }
         }
 
@@ -52,8 +52,8 @@ namespace Microsoft.Scripting.Runtime {
         /// are bound to methods defined in the provided Scope and converted using the provided DynamicOperations
         /// object.
         /// </summary>
-        public static object LoadComponent(dynamic scope, DynamicOperations operations, XmlReader reader) {
-            return LoadComponent((object)scope, operations, new XamlXmlReader(reader));
+        public static object LoadComponent(dynamic scope, DynamicOperations operations, XmlReader reader, XamlSchemaContext schemaContext) {
+            return LoadComponent((object)scope, operations, new XamlXmlReader(reader, schemaContext ?? new XamlSchemaContext()));
         }
 
         /// <summary>
@@ -61,8 +61,8 @@ namespace Microsoft.Scripting.Runtime {
         /// are bound to methods defined in the provided Scope and converted using the provided DynamicOperations
         /// object.
         /// </summary>
-        public static object LoadComponent(dynamic scope, DynamicOperations operations, TextReader reader) {
-            return LoadComponent((object)scope, operations, new XamlXmlReader(reader));
+        public static object LoadComponent(dynamic scope, DynamicOperations operations, TextReader reader, XamlSchemaContext schemaContext) {
+            return LoadComponent((object)scope, operations, new XamlXmlReader(reader, schemaContext ?? new XamlSchemaContext()));
         }
 
         /// <summary>
@@ -70,7 +70,7 @@ namespace Microsoft.Scripting.Runtime {
         /// are bound to methods defined in the provided Scope and converted using the provided DynamicOperations
         /// object.
         /// </summary>
-        internal static object LoadComponent(dynamic scope, DynamicOperations operations, XamlXmlReader reader) {
+        public static object LoadComponent(dynamic scope, DynamicOperations operations, XamlXmlReader reader) {
             var settings = new XamlObjectWriterSettings();
             settings.RootObjectInstance = scope;
 
