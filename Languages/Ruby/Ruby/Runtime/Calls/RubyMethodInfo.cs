@@ -32,6 +32,7 @@ using System.Diagnostics;
 
 namespace IronRuby.Runtime.Calls {
     using Ast = MSA.Expression;
+    using Microsoft.Scripting;
 
     public sealed class RubyMethodInfo : RubyMemberInfo {
         // Delegate type for methods with many parameters.
@@ -41,10 +42,9 @@ namespace IronRuby.Runtime.Calls {
         private readonly RubyScope/*!*/ _declaringScope;
 
         public string/*!*/ DefinitionName { get { return _body.Name; } }
-        public int MandatoryParamCount { get { return _body.MandatoryParameterCount; } }
-        public int OptionalParamCount { get { return _body.OptionalParameterCount; } }
-        public bool HasUnsplatParameter { get { return _body.HasUnsplatParameter; } }
+        public Parameters/*!*/ Parameters { get { return _body.Ast.Parameters; } }
         public MSA.SymbolDocumentInfo Document { get { return _body.Document; } }
+        public SourceSpan SourceSpan { get { return _body.Ast.Location; } }
         public RubyScope/*!*/ DeclaringScope { get { return _declaringScope; } }
 
         // method:
@@ -61,8 +61,8 @@ namespace IronRuby.Runtime.Calls {
         }
         
         public override RubyMemberInfo TrySelectOverload(Type/*!*/[]/*!*/ parameterTypes) {
-            return parameterTypes.Length >= MandatoryParamCount 
-                && (HasUnsplatParameter || parameterTypes.Length <= MandatoryParamCount + OptionalParamCount)
+            return parameterTypes.Length >= Parameters.Mandatory.Length
+                && (Parameters.Unsplat != null || parameterTypes.Length <= Parameters.Mandatory.Length + Parameters.Optional.Length)
                 && CollectionUtils.TrueForAll(parameterTypes, (type) => type == typeof(object)) ? this : null;
         }
 
@@ -71,11 +71,41 @@ namespace IronRuby.Runtime.Calls {
         }
 
         public override int GetArity() {
-            if (_body.HasUnsplatParameter || OptionalParamCount > 0) {
-                return -MandatoryParamCount - 1;
+            if (Parameters.Unsplat != null || Parameters.Optional.Length > 0) {
+                return -Parameters.Mandatory.Length - 1;
             } else {
-                return MandatoryParamCount;
+                return Parameters.Mandatory.Length;
             }
+        }
+
+        public override RubyArray/*!*/ GetRubyParameterArray() {
+            var context = _declaringScope.RubyContext;
+            var reqSymbol = context.CreateAsciiSymbol("req");
+            var optSymbol = context.CreateAsciiSymbol("opt");
+            var ps =_body.Ast.Parameters;
+
+            RubyArray result = new RubyArray();
+            for (int i = 0; i < ps.LeadingMandatoryCount; i++) {
+                result.Add(new RubyArray { reqSymbol, context.EncodeIdentifier(((LocalVariable)ps.Mandatory[i]).Name) });
+            }
+
+            foreach (var p in ps.Optional) {
+                result.Add(new RubyArray { optSymbol, context.EncodeIdentifier(((LocalVariable)p.Left).Name) });
+            }
+
+            if (ps.Unsplat != null) {
+                result.Add(new RubyArray { context.CreateAsciiSymbol("rest"), context.EncodeIdentifier(((LocalVariable)ps.Unsplat).Name) });
+            }
+
+            for (int i = ps.LeadingMandatoryCount; i < ps.Mandatory.Length; i++) {
+                result.Add(new RubyArray { reqSymbol, context.EncodeIdentifier(((LocalVariable)ps.Mandatory[i]).Name) });
+            }
+
+            if (ps.Block != null) {
+                result.Add(new RubyArray { context.CreateAsciiSymbol("block"), context.EncodeIdentifier(ps.Block.Name) });
+            }
+
+            return result;
         }
 
         public MethodDeclaration/*!*/ GetSyntaxTree() {
@@ -89,7 +119,7 @@ namespace IronRuby.Runtime.Calls {
         #region Dynamic Sites
 
         internal override MemberDispatcher GetDispatcher(Type/*!*/ delegateType, RubyCallSignature signature, object target, int version) {
-            if (HasUnsplatParameter || OptionalParamCount > 0) {
+            if (Parameters.Unsplat != null || Parameters.Optional.Length > 0) {
                 return null;
             }
 
@@ -98,7 +128,7 @@ namespace IronRuby.Runtime.Calls {
             }
 
             return MethodDispatcher.CreateRubyObjectDispatcher(
-                delegateType, GetDelegate(), MandatoryParamCount, signature.HasScope, signature.HasBlock, version
+                delegateType, GetDelegate(), Parameters.Mandatory.Length, signature.HasScope, signature.HasBlock, version
             );
         }
 
@@ -106,7 +136,7 @@ namespace IronRuby.Runtime.Calls {
             Assert.NotNull(metaBuilder, args, name);
 
             // 2 implicit args: self, block
-            var argsBuilder = new ArgsBuilder(2, MandatoryParamCount, OptionalParamCount, _body.HasUnsplatParameter);
+            var argsBuilder = new ArgsBuilder(2, Parameters.Mandatory.Length, Parameters.LeadingMandatoryCount, Parameters.Optional.Length, Parameters.Unsplat != null);
             argsBuilder.SetImplicit(0, AstUtils.Box(args.TargetExpression));
             argsBuilder.SetImplicit(1, args.Signature.HasBlock ? AstUtils.Convert(args.GetBlockExpression(), typeof(Proc)) : AstFactory.NullOfProc);
             argsBuilder.AddCallArguments(metaBuilder, args);

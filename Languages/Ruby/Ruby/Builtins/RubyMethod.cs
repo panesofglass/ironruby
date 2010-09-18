@@ -21,6 +21,7 @@ using Microsoft.Scripting.Ast;
 
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using IronRuby.Runtime;
@@ -32,7 +33,6 @@ using AstUtils = Microsoft.Scripting.Ast.Utils;
 namespace IronRuby.Builtins {
     using Ast = Expression;
     using BlockCallTargetUnsplatN = Func<BlockParam, object, object[], RubyArray, object>;
-    using System.Globalization;
 
     [DebuggerDisplay("{GetDebugView(), nq}")]
     public partial class RubyMethod {
@@ -68,6 +68,10 @@ namespace IronRuby.Builtins {
 
         public virtual Proc/*!*/ ToProc(RubyScope/*!*/ scope) {
             ContractUtils.RequiresNotNull(scope, "scope");
+
+            // TODO: 
+            // This should pass a proc parameter (use BlockDispatcherUnsplatProcN).
+            // MRI 1.9.2 doesn't do so though (see http://redmine.ruby-lang.org/issues/show/3792).
 
             if (_procDispatcher == null) {
                 var site = CallSite<Func<CallSite, object, object, object>>.Create(

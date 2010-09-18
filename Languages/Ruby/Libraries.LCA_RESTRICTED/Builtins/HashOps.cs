@@ -24,6 +24,7 @@ using System.Diagnostics;
 using Microsoft.Scripting.Generation;
 using System.Threading;
 using IronRuby.Runtime.Calls;
+using IronRuby.Runtime.Conversions;
 
 namespace IronRuby.Builtins {
 
@@ -60,7 +61,39 @@ namespace IronRuby.Builtins {
         public static Hash/*!*/ CreateSubclass(RubyClass/*!*/ self) {
             return Hash.CreateInstance(self);
         }
-        
+
+        [RubyMethod("[]", RubyMethodAttributes.PublicSingleton)]
+        public static Hash/*!*/ CreateSubclass(ConversionStorage<IDictionary<object, object>>/*!*/ toHash, ConversionStorage<IList>/*!*/ toAry,
+            RubyClass/*!*/ self, object listOrHash) {
+
+            var toHashSite = toHash.GetSite(TryConvertToHashAction.Make(toHash.Context));
+            var hash = toHashSite.Target(toHashSite, listOrHash);
+            if (hash != null) {
+                return CreateSubclass(self, hash);
+            }
+
+            var toArySite = toAry.GetSite(TryConvertToArrayAction.Make(toAry.Context));
+            var array = toArySite.Target(toArySite, listOrHash);
+            if (array != null) {
+                return CreateSubclass(toAry, self, array);
+            }
+
+            throw RubyExceptions.CreateArgumentError("odd number of arguments for Hash");
+        }
+
+        [RubyMethod("[]", RubyMethodAttributes.PublicSingleton)]
+        public static Hash/*!*/ CreateSubclass(ConversionStorage<IList>/*!*/ toAry, RubyClass/*!*/ self, [NotNull]IList/*!*/ list) {
+            Hash result = Hash.CreateInstance(self);
+            var toArySite = toAry.GetSite(TryConvertToArrayAction.Make(toAry.Context));
+            foreach (object item in list) {
+                IList pair = toArySite.Target(toArySite, item);
+                if (pair != null && pair.Count >= 1 && pair.Count <= 2) {
+                    RubyUtils.SetHashElement(self.Context, result, pair[0], (pair.Count == 2) ? pair[1] : null);
+                }
+            }
+            return result;
+        }
+
         [RubyMethod("[]", RubyMethodAttributes.PublicSingleton)]
         public static Hash/*!*/ CreateSubclass(RubyClass/*!*/ self, [NotNull]IDictionary<object, object>/*!*/ hash) {
             // creates a new hash and copies entries of the given hash into it (no other objects associated with the has are copied):
@@ -81,6 +114,7 @@ namespace IronRuby.Builtins {
         [RubyMethod("initialize", RubyMethodAttributes.PrivateInstance)]
         public static Hash/*!*/ Initialize(Hash/*!*/ self) {
             Assert.NotNull(self);
+            self.RequireNotFrozen();
             return self;
         }
 
@@ -108,7 +142,6 @@ namespace IronRuby.Builtins {
 
         [RubyMethod("initialize_copy", RubyMethodAttributes.PrivateInstance)]
         public static Hash/*!*/ InitializeCopy(RubyContext/*!*/ context, Hash/*!*/ self, [NotNull]Hash/*!*/ source) {
-            self.Mutate();
             self.DefaultProc = source.DefaultProc;
             self.DefaultValue = source.DefaultValue;
             IDictionaryOps.ReplaceData(self, source);
@@ -116,11 +149,17 @@ namespace IronRuby.Builtins {
         }
 
         #endregion
+
+        [RubyMethod("try_convert", RubyMethodAttributes.PublicSingleton)]
+        public static IDictionary<object, object> TryConvert(ConversionStorage<IDictionary<object, object>>/*!*/ toHash, RubyClass/*!*/ self, object obj) {
+            var site = toHash.GetSite(TryConvertToHashAction.Make(toHash.Context));
+            return site.Target(site, obj);
+        }
         
         #region Instance Methods
         
         [RubyMethod("[]")]
-        public static object GetElement(CallSiteStorage<Func<CallSite, Hash, object, object>>/*!*/ storage, Hash/*!*/ self, object key) {
+        public static object GetElement(BinaryOpStorage/*!*/ storage, IDictionary<object, object>/*!*/ self, object key) {
             object result;
             if (!self.TryGetValue(CustomStringDictionary.NullToObj(key), out result)) {
                 var site = storage.GetCallSite("default", 1);
@@ -145,7 +184,6 @@ namespace IronRuby.Builtins {
 
         [RubyMethod("default=")]
         public static object SetDefaultValue(RubyContext/*!*/ context, Hash/*!*/ self, object value) {
-            self.Mutate();
             self.DefaultProc = null;
             return self.DefaultValue = value;
         }
@@ -154,41 +192,14 @@ namespace IronRuby.Builtins {
         public static Proc GetDefaultProc(Hash/*!*/ self) {
             return self.DefaultProc;
         }
-
-        [RubyMethod("inspect")]
-        public static MutableString/*!*/ Inspect(RubyContext/*!*/ context, Hash/*!*/ self) {
-
-            using (IDisposable handle = RubyUtils.InfiniteInspectTracker.TrackObject(self)) {
-                if (handle == null) {
-                    return MutableString.CreateAscii("{...}");
-                }
-
-                MutableString str = MutableString.CreateMutable(RubyEncoding.Binary);
-                str.Append('{');
-                bool first = true;
-                foreach (var entry in self) {
-                    if (first) {
-                        first = false;
-                    } else {
-                        str.Append(", ");
-                    }
-                    str.Append(context.Inspect(CustomStringDictionary.ObjToNull(entry.Key)));
-                    str.Append("=>");
-                    str.Append(context.Inspect(entry.Value));
-                }
-                str.Append('}');
-                return str;
-            }
-        }
         
         [RubyMethod("replace")]
         public static Hash/*!*/ Replace(RubyContext/*!*/ context, Hash/*!*/ self, [DefaultProtocol, NotNull]IDictionary<object,object>/*!*/ other) {
             if (Object.ReferenceEquals(self, other)) {
+                self.RequireNotFrozen();
                 return self;
             }
 
-            self.Mutate();
-            
             Hash otherHash = other as Hash;
             if (otherHash != null) {
                 self.DefaultValue = otherHash.DefaultValue;
@@ -199,7 +210,7 @@ namespace IronRuby.Builtins {
 
         [RubyMethod("shift")]
         public static object Shift(CallSiteStorage<Func<CallSite, Hash, object, object>>/*!*/ storage, Hash/*!*/ self) {
-            self.Mutate();
+            self.RequireNotFrozen();
             
             if (self.Count == 0) {
                 var site = storage.GetCallSite("default", 1);

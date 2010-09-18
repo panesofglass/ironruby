@@ -69,6 +69,9 @@ namespace IronRuby.Builtins {
 
         // true if untrusted:
         private const uint IsUntrustedFlag = 256;
+
+        // true if the content should be copied on mutation:
+        private const uint CopyOnWriteFlag = 512;
         
         // The instance is frozen so that it can be shared, but it should not be used in places where
         // it will be accessible from user code as the user code could try to mutate it.
@@ -83,6 +86,10 @@ namespace IronRuby.Builtins {
         }
 
         private void SetEncoding(RubyEncoding/*!*/ encoding) {
+            // String operations (GetHashCode, SetChar, etc.) assume that the encoding maps each and every 
+            // character \u0000..\u007f to a corresponding byte 0..0x7f and back.
+            encoding.RequireAsciiIdentity();
+
             _encoding = encoding;
             if (encoding == RubyEncoding.Binary) {
                 _flags |= IsBinaryEncodedFlag;
@@ -116,13 +123,13 @@ namespace IronRuby.Builtins {
 
         // binary (doesn't make a copy of the array):
         private MutableString(byte[]/*!*/ bytes, RubyEncoding/*!*/ encoding)
-            : this(encoding.IsKCoding ? new KBinaryContent(bytes, null) : new BinaryContent(bytes, null), encoding) {
+            : this(new BinaryContent(bytes, null), encoding) {
         }
 
         // binary (doesn't make a copy of the array):
         // used by RubyBufferedStream:
         internal MutableString(byte[]/*!*/ bytes, int count, RubyEncoding/*!*/ encoding)
-            : this(encoding.IsKCoding ? new KBinaryContent(bytes, count, null) : new BinaryContent(bytes, count, null), encoding) {
+            : this(new BinaryContent(bytes, count, null), encoding) {
         }
 
         // immutable:
@@ -275,9 +282,8 @@ namespace IronRuby.Builtins {
         #region Versioning, Encoding, HashCode, and Flags
 
         /// <summary>
-        /// Returns true if its character and byte representation is guaranteed to be the same per character or byte, i.e.
-        /// if the string is known to contain ASCII characters only or if the string is binary-encoded.
-        /// 
+        /// Returns true f the string is known to contain ASCII characters only or if the string is binary-encoded.
+        /// Characters are then same as bytes.
         /// Doesn't inspect the content of the string if the ASCII flag is not valid.
         /// </summary>
         public bool HasByteCharacters {
@@ -288,10 +294,20 @@ namespace IronRuby.Builtins {
             }
         }
 
-        private void MutateContent(uint setFlags) {
-            uint flags = _flags;
+        private void FrozenOrCopyOnWrite(uint flags) {
             if ((flags & IsFrozenFlag) != 0) {
                 throw RubyExceptions.CreateObjectFrozenError();
+            }
+
+            // TODO: we can do better if the representation is being changed: we don't need to copy the data twice
+            _content = _content.Clone();
+            _flags = flags & ~CopyOnWriteFlag;
+        }
+
+        private void MutateContent(uint setFlags) {
+            uint flags = _flags;
+            if ((flags & (IsFrozenFlag | CopyOnWriteFlag)) != 0) {
+                FrozenOrCopyOnWrite(flags);
             }
             _flags = flags | setFlags;
         }
@@ -306,8 +322,8 @@ namespace IronRuby.Builtins {
         [Conditional("INLINED")]
         private void MutateOne(int charOrByte) {
             uint flags = _flags;
-            if ((flags & IsFrozenFlag) != 0) {
-                throw RubyExceptions.CreateObjectFrozenError();
+            if ((flags & (IsFrozenFlag | CopyOnWriteFlag)) != 0) {
+                FrozenOrCopyOnWrite(flags);
             }
             _flags = flags | (charOrByte >= 0x80 ? HasChangedFlags | HashUnknownFlag | AsciiUnknownFlag : HasChangedFlags | HashUnknownFlag);
         }
@@ -335,97 +351,64 @@ namespace IronRuby.Builtins {
         private void Mutate(MutableString/*!*/ other) {
             RubyEncoding newEncoding = RequireCompatibleEncoding(other);
             Mutate();
-            if (newEncoding != null) {
-                SetEncoding(newEncoding);
-            }
+            SetEncoding(newEncoding);
         }
 
         /// <summary>
         /// Checks if the other string's encoding is compatible with this string's encoding.
-        /// If it is not an exception is thrown.
-        /// Otherwise returns the encoding that should be used for the result of the operation if it is different from this string's encoding.
-        /// (returns null if so).
+        /// If it is returns the encoding that should be used for the result of the operation.
+        /// Returns a <c>null</c> reference otherwise.
         /// </summary>
-        public RubyEncoding RequireCompatibleEncoding(MutableString/*!*/ other) {
-            if (_encoding == other.Encoding) {
-                return null;
+        public RubyEncoding GetCompatibleEncoding(MutableString/*!*/ other) {
+            return GetCompatibleEncoding(other.Encoding) ?? (other.IsAscii() ? _encoding : null);
+        }
+
+        public RubyEncoding GetCompatibleEncoding(RubyEncoding/*!*/ encoding) {
+            return GetCompatibleEncoding(_encoding, encoding) ?? (IsAscii() ? encoding : null);
+        }
+
+        public static RubyEncoding GetCompatibleEncoding(RubyEncoding/*!*/ encoding1, RubyEncoding/*!*/ encoding2) {
+            if (encoding1 == encoding2) {
+                return encoding1;
             }
 
-            // K-coded strings are in fact raw binary data which are just presented to .NET as strings (using their RealEncoding).
-            if (_encoding.IsKCoding || other.Encoding.IsKCoding) {
-                if (_encoding.RealEncoding == other.Encoding.RealEncoding) {
-                    // it makes sense to present the resulting string using the same K-coding:
-                    if (!_encoding.IsKCoding) {
-                        return other.Encoding;
-                    }
-                    return null;
-                } else {
-                    // Present the result as raw binary data.
-                    // Note: we could also preserve the K-coding for ascii strings but we don't do that to avoid additional cost.
-                    SwitchToBytes();
-
-                    // Must switch the other to bytes as well so that the operation is performed on bytes.
-                    other.SwitchToBytes();
-
-                    return RubyEncoding.Binary;
-                }
+            if (encoding1 == RubyEncoding.Ascii) {
+                return encoding2;
+            } 
+            
+            if (encoding2 == RubyEncoding.Ascii) {
+                return encoding1;
             }
 
-            // MRI implicitly changes encoding of a string that contains ascii bytes/characters only.
-            if (other.IsAscii()) {
-                if (IsBinaryEncoded && IsAscii()) {
-                    // we can safely change encoding since the string contains ascii bytes/characters only:
-                    return other.Encoding;
-                } else {
-                    return null;
-                }
-            }
+            return null;
+        }
 
-            if (IsAscii()) {
-                // we can safely change encoding since the string contains ascii bytes/characters only:
-                return other.Encoding;
+        public RubyEncoding/*!*/ RequireCompatibleEncoding(MutableString/*!*/ other) {
+            var result = GetCompatibleEncoding(other);
+            if (result == null) {
+                throw RubyExceptions.CreateEncodingCompatibilityError(_encoding, other.Encoding);
             }
-
-            throw RubyExceptions.CreateEncodingCompatibilityError(_encoding, other.Encoding);
+            return result;
         }
 
         /// <summary>
         /// Changes encoding to the specified one. 
+        /// The resulting string might contain byte-sequences that don't represent valid characters in the target encoding.
         /// </summary>
-        public MutableString/*!*/ ChangeEncoding(RubyEncoding/*!*/ newEncoding, bool inplace) {
+        public void ForceEncoding(RubyEncoding/*!*/ newEncoding) {
             ContractUtils.RequiresNotNull(newEncoding, "newEncoding");
+
             if (_encoding == newEncoding) {
-                return this;
-            }
-
-            if ((_encoding.IsKCoding || _encoding == RubyEncoding.Binary) &&
-                (newEncoding.IsKCoding || newEncoding == RubyEncoding.Binary)) {
-
-                if (!IsAscii()) {
-                    SwitchToBytes();
-                }
-
-                SetEncoding(newEncoding);
-                return this;
-            }
-
-            MutableString result;
-            if (inplace) {
-                result = this;
-            } else {
-                result = MutableString.Create(this);
-            }
-
-            result.ChangeEncoding(newEncoding);
-            return result;
-        }
-
-        private void ChangeEncoding(RubyEncoding/*!*/ newEncoding) {
-            if (_encoding.RealEncoding == newEncoding.RealEncoding) {
-                Mutate();
-                SetEncoding(newEncoding); 
                 return;
             }
+
+            if (IsBinary) {
+                SetEncoding(newEncoding);
+                return;
+            }
+
+            // If the representation is character based and include non-ascii chcaracters then we need 
+            // to switch to binary repr before we change the encoding so that the binary repr of the string is preserved.
 
             // this caches hash-code, which we need to invalidate due to encoding change:
             bool isAscii = IsAscii();
@@ -433,10 +416,6 @@ namespace IronRuby.Builtins {
 
             if (isAscii) {
                 SetEncoding(newEncoding);
-            } else if (newEncoding != RubyEncoding.Binary) {
-                SwitchToCharacters();
-                SetEncoding(newEncoding);
-                CheckEncoding();
             } else {
                 SwitchToBytes();
                 SetEncoding(newEncoding);
@@ -474,16 +453,11 @@ namespace IronRuby.Builtins {
             int hash;
             int binarySum;
 
-            if (_encoding.IsKCoding) {
-                // 1.8 strings don't know encodings => if 2 strings are binary equivalent they have the same hash:
-                hash = _content.GetBinaryHashCode(out binarySum);
-            } else {
-                hash = _content.GetHashCode(out binarySum);
+            hash = _content.GetHashCode(out binarySum);
 
-                // xor with the encoding if there are any non-ASCII characters in the string:
-                if (binarySum >= 0x0080 && !IsBinaryEncoded) {
-                    hash ^= _encoding.GetHashCode();
-                }
+            // xor with the encoding if there are any non-ASCII characters in the string:
+            if (binarySum >= 0x0080 && !IsBinaryEncoded) {
+                hash ^= _encoding.GetHashCode();
             }
 
             if (binarySum >= 0x0080) {
@@ -528,6 +502,10 @@ namespace IronRuby.Builtins {
             return this;
         }
 
+        public bool ContainsInvalidCharacters() {
+            return _content.ContainsInvalidCharacters();
+        }
+
         public bool IsTainted {
             get {
                 return (_flags & IsTaintedFlag) != 0; 
@@ -548,7 +526,7 @@ namespace IronRuby.Builtins {
             }
             set {
                 var flags = _flags;
-                if ((flags & IsUntrustedFlag) != 0) {
+                if ((flags & IsFrozenFlag) != 0) {
                     throw RubyExceptions.CreateObjectFrozenError();
                 }
 
@@ -734,8 +712,6 @@ namespace IronRuby.Builtins {
             // Switch if the content is not already char based or the bytes are not the same as the equivalent characters:
             if (IsBinary && !IsBinaryEncoded && !IsAscii()) {
                 SwitchToCharacters();
-            } else if (_encoding.IsKCoding) {
-                SwitchToBytes();
             }
 
             return this;
@@ -751,8 +727,6 @@ namespace IronRuby.Builtins {
         public MutableString/*!*/ PrepareForCharacterWrite() {
             if (IsBinary) {
                 SwitchToCharacters();
-            } else if (_encoding.IsKCoding) {
-                SwitchToBytes();
             } else {
                 _content.SwitchToMutableContent();
             }
@@ -795,16 +769,9 @@ namespace IronRuby.Builtins {
             }
 
             if (_encoding != other._encoding) {
-                if (_encoding.CompareTo(other._encoding) != 0) {
-                    // only ASCII strings might compare equal if their encodings are different:
-                    if (!IsAscii() || !other.IsAscii()) {
-                        return false;
-                    }
-                } else {
-                    // we can't compare char representations if they are encoded with different k-codings:
-                    Debug.Assert(_encoding.IsKCoding || other._encoding.IsKCoding);
-                    SwitchToBytes();
-                    other.SwitchToBytes();
+                // only ASCII strings might compare equal if their encodings are different:
+                if (!IsAscii() || !other.IsAscii()) {
+                    return false;
                 }
             }
 
@@ -820,17 +787,9 @@ namespace IronRuby.Builtins {
             if (ReferenceEquals(other, null)) return 1;
 
             if (_encoding != other._encoding) {
-                int result = _encoding.CompareTo(other._encoding);
-                if (result != 0) {
-                    // only ASCII strings might compare equal if their encodings are different:
-                    if (!IsAscii() || !other.IsAscii()) {
-                        return result;
-                    }
-                } else {
-                    // we can't compare char representations if they are encoded with different k-codings:
-                    Debug.Assert(_encoding.IsKCoding || other._encoding.IsKCoding);
-                    SwitchToBytes();
-                    other.SwitchToBytes();
+                // only ASCII strings might compare equal if their encodings are different:
+                if (!IsAscii() || !other.IsAscii()) {
+                    return _encoding.CompareTo(other._encoding);
                 }
             }
 
@@ -924,7 +883,7 @@ namespace IronRuby.Builtins {
             ContractUtils.RequiresNotNull(value, "value");
 
             // TODO:
-            if (IsBinary || value.IsBinary || _encoding.IsKCoding || value.Encoding.IsKCoding) {
+            if (IsBinary || value.IsBinary) {
                 int valueLength = value.GetByteCount();
                 int offset = GetByteCount() - valueLength;
                 if (offset < 0) {
@@ -961,27 +920,51 @@ namespace IronRuby.Builtins {
             [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Security", "CA2105:ArrayFieldsShouldNotBeReadOnly")]
             public readonly byte[] Invalid;
             public readonly char Value;
+            public readonly char LowSurrogate;
 
             public bool IsValid {
                 get { return Invalid == null; }
             }
 
+            public bool IsSurrogate {
+                get { return LowSurrogate != '\0'; }
+            }
+
+            public int Codepoint {
+                get { return IsSurrogate ? Tokenizer.ToCodePoint(Value, LowSurrogate) : (int)Value; }
+            }
+
             internal Character(byte[]/*!*/ invalid) {
                 Invalid = invalid;
                 Value = '\0';
+                LowSurrogate = '\0';
             }
 
             internal Character(char value) {
                 Invalid = null;
                 Value = value;
+                LowSurrogate = '\0';
+            }
+
+            internal Character(char highSurrogate, char lowSurrogate) {
+                Debug.Assert(Tokenizer.IsHighSurrogate(highSurrogate) && Tokenizer.IsLowSurrogate(lowSurrogate));
+                Invalid = null;
+                Value = highSurrogate;
+                LowSurrogate = lowSurrogate;
             }
 
             public bool Equals(Character other) {
                 if (IsValid) {
-                    return other.IsValid && Value == other.Value;
+                    return other.IsValid && Value == other.Value && LowSurrogate == other.LowSurrogate;
                 } else {
                     return !other.IsValid && Invalid.ValueEquals(other.Invalid);
                 }
+            }
+
+            public MutableString/*!*/ ToMutableString(RubyEncoding/*!*/ encoding) {
+                return IsSurrogate ?
+                    new MutableString(new char[] { Value, LowSurrogate }, encoding) :
+                    new MutableString(new char[] { Value }, encoding);
             }
         }
 
@@ -1047,15 +1030,24 @@ namespace IronRuby.Builtins {
             }
 
             public override bool MoveNext() {
-                if (_index < 0) {
-                    _index = 0;
+                int index = _index;
+                if (index < 0) {
+                    index = 0;
                 }
 
-                if (!HasMore) {
+                if (index == _data.Length) {
+                    _index = index;
                     return false;
                 }
 
-                _current = new Character(_data[_index++]);
+                char c, d;
+                if (Tokenizer.IsHighSurrogate(c = _data[index]) && index + 1 < _data.Length && Tokenizer.IsLowSurrogate(d = _data[index + 1])) {
+                    _current = new Character(c, d);
+                    _index = index + 2;
+                } else {
+                    _current = new Character(c);
+                    _index = index + 1;
+                }
                 return true;
             }
 
@@ -1134,22 +1126,32 @@ namespace IronRuby.Builtins {
             }
 
             public override bool MoveNext() {
-                if (_index < 0) {
-                    _index = 0;
+                int index = _index;
+                if (index < 0) {
+                    index = 0;
                 }
 
-                if (!HasMore) {
+                if (index == _count) {
+                    _index = index;
                     return false;
                 }
 
-                char c = _data[_index++];
-#if SILVERLIGHT
-                _current = new Character(c);
-#else
+                char c = _data[index];
+#if !SILVERLIGHT
                 if (c != LosslessDecoderFallback.InvalidCharacterPlaceholder) {
-                    _current = new Character(c);
+#endif
+                    char d;
+                    if (Tokenizer.IsHighSurrogate(c) && index + 1 < _data.Length && Tokenizer.IsLowSurrogate(d = _data[index + 1])) {
+                        _current = new Character(c, d);
+                        _index = index + 2;
+                    } else {
+                        _current = new Character(c);
+                        _index = index + 1;
+                    }
+#if !SILVERLIGHT
                 } else if (_invalidIndex < InvalidCount) {
                     _current = new Character(_invalid[_invalidIndex++]);
+                    _index = index + 1;
                 } else {
                     // this can only happen if the decoder produces invalid characters \uFFFF, which it should not:
                     throw new InvalidOperationException("Decoder produced an invalid chracter \uFFFF.");
@@ -1190,13 +1192,14 @@ namespace IronRuby.Builtins {
         /// <summary>
         /// Enumerates over characters contained in the string. 
         /// Yields both valid characters and invalid byte sequences.
-        /// Yields characters even for K-coded strings.
         /// </summary>
         public CharacterEnumerator/*!*/ GetCharacters() {
+            _flags |= CopyOnWriteFlag;
             return _content.GetCharacters();
         }
 
         public IEnumerable<byte>/*!*/ GetBytes() {
+            _flags |= CopyOnWriteFlag;
             return _content.GetBytes(); 
         }
 
@@ -1436,7 +1439,7 @@ namespace IronRuby.Builtins {
         /// </summary>
         public MutableString/*!*/ Concat(MutableString/*!*/ other) {
             ContractUtils.RequiresNotNull(other, "other");
-            var encoding = RequireCompatibleEncoding(other) ?? _encoding;
+            var encoding = RequireCompatibleEncoding(other);
             return new MutableString(_content.Concat(other._content), encoding);
         }
 
@@ -1450,8 +1453,8 @@ namespace IronRuby.Builtins {
         public MutableString/*!*/ Append(char value) {
             #region Optimization: MutateOne inlined
             uint flags = _flags;
-            if ((flags & IsFrozenFlag) != 0) {
-                throw RubyExceptions.CreateObjectFrozenError();
+            if ((flags & (IsFrozenFlag | CopyOnWriteFlag)) != 0) {
+                FrozenOrCopyOnWrite(flags);
             }
             _flags = flags | (value >= 0x80 ? HasChangedFlags | HashUnknownFlag | AsciiUnknownFlag : HasChangedFlags | HashUnknownFlag);
             #endregion
@@ -1466,8 +1469,8 @@ namespace IronRuby.Builtins {
         public MutableString/*!*/ Append(char value, int repeatCount) {
             #region Optimization: MutateOne inlined
             uint flags = _flags;
-            if ((flags & IsFrozenFlag) != 0) {
-                throw RubyExceptions.CreateObjectFrozenError();
+            if ((flags & (IsFrozenFlag | CopyOnWriteFlag)) != 0) {
+                FrozenOrCopyOnWrite(flags);
             }
             _flags = flags | (value >= 0x80 ? HasChangedFlags | HashUnknownFlag | AsciiUnknownFlag : HasChangedFlags | HashUnknownFlag);
             #endregion
@@ -1479,8 +1482,8 @@ namespace IronRuby.Builtins {
         public MutableString/*!*/ Append(byte value) {
             #region Optimization: MutateOne inlined
             uint flags = _flags;
-            if ((flags & IsFrozenFlag) != 0) {
-                throw RubyExceptions.CreateObjectFrozenError();
+            if ((flags & (IsFrozenFlag | CopyOnWriteFlag)) != 0) {
+                FrozenOrCopyOnWrite(flags);
             }
             _flags = flags | (value >= 0x80 ? HasChangedFlags | HashUnknownFlag | AsciiUnknownFlag : HasChangedFlags | HashUnknownFlag);
             #endregion
@@ -1492,8 +1495,8 @@ namespace IronRuby.Builtins {
         public MutableString/*!*/ Append(byte value, int repeatCount) {
             #region Optimization: MutateOne inlined
             uint flags = _flags;
-            if ((flags & IsFrozenFlag) != 0) {
-                throw RubyExceptions.CreateObjectFrozenError();
+            if ((flags & (IsFrozenFlag | CopyOnWriteFlag)) != 0) {
+                FrozenOrCopyOnWrite(flags);
             }
             _flags = flags | (value >= 0x80 ? HasChangedFlags | HashUnknownFlag | AsciiUnknownFlag : HasChangedFlags | HashUnknownFlag);
             #endregion
@@ -1632,7 +1635,11 @@ namespace IronRuby.Builtins {
 
         public MutableString/*!*/ Append(Character character) {
             if (character.IsValid) {
-                return Append(character.Value);
+                Append(character.Value);
+                if (character.IsSurrogate) {
+                    Append(character.LowSurrogate);
+                }
+                return this;
             } else {
                 return Append(character.Invalid);
             }
@@ -1650,8 +1657,9 @@ namespace IronRuby.Builtins {
 
         public void SetChar(int index, char value) {
             #region Optimization: MutateOne inlined
-            if ((_flags & IsFrozenFlag) != 0) {
-                throw RubyExceptions.CreateObjectFrozenError();
+            uint flags = _flags;
+            if ((flags & (IsFrozenFlag | CopyOnWriteFlag)) != 0) {
+                FrozenOrCopyOnWrite(flags);
             }
             _flags |= (value >= 0x80 ? HasChangedFlags | HashUnknownFlag | AsciiUnknownFlag : HasChangedFlags | HashUnknownFlag);
             #endregion
@@ -1662,8 +1670,8 @@ namespace IronRuby.Builtins {
         public void SetByte(int index, byte value) {
             #region Optimization: MutateOne inlined
             uint flags = _flags;
-            if ((flags & IsFrozenFlag) != 0) {
-                throw RubyExceptions.CreateObjectFrozenError();
+            if ((flags & (IsFrozenFlag | CopyOnWriteFlag)) != 0) {
+                FrozenOrCopyOnWrite(flags);
             }
             _flags = flags | (value >= 0x80 ? HasChangedFlags | HashUnknownFlag | AsciiUnknownFlag : HasChangedFlags | HashUnknownFlag);
             #endregion
@@ -1674,8 +1682,8 @@ namespace IronRuby.Builtins {
         public MutableString/*!*/ Insert(int index, char value) {
             #region Optimization: MutateOne inlined
             uint flags = _flags;
-            if ((flags & IsFrozenFlag) != 0) {
-                throw RubyExceptions.CreateObjectFrozenError();
+            if ((flags & (IsFrozenFlag | CopyOnWriteFlag)) != 0) {
+                FrozenOrCopyOnWrite(flags);
             }
             _flags = flags | (value >= 0x80 ? HasChangedFlags | HashUnknownFlag | AsciiUnknownFlag : HasChangedFlags | HashUnknownFlag);
             #endregion
@@ -1687,8 +1695,8 @@ namespace IronRuby.Builtins {
         public MutableString/*!*/ Insert(int index, byte value) {
             #region Optimization: MutateOne inlined
             uint flags = _flags;
-            if ((flags & IsFrozenFlag) != 0) {
-                throw RubyExceptions.CreateObjectFrozenError();
+            if ((flags & (IsFrozenFlag | CopyOnWriteFlag)) != 0) {
+                FrozenOrCopyOnWrite(flags);
             }
             _flags = flags | (value >= 0x80 ? HasChangedFlags | HashUnknownFlag | AsciiUnknownFlag : HasChangedFlags | HashUnknownFlag);
             #endregion

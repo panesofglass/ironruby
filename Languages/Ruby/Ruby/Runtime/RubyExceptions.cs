@@ -41,12 +41,11 @@ namespace IronRuby.Runtime {
         }
 
         public static Exception/*!*/ CreateTypeError(Exception innerException, string/*!*/ message, params object[] args) {
-            // TODO: RuntimeError in 1.9
             return new InvalidOperationException(FormatMessage(message, args), innerException);
         }
 
         public static Exception/*!*/ CreateObjectFrozenError() {
-            return CreateTypeError("can't modify frozen object");
+            return CreateRuntimeError("can't modify frozen object");
         }
 
         public static Exception/*!*/ CreateTypeConversionError(string/*!*/ fromType, string/*!*/ toType) {
@@ -255,14 +254,12 @@ namespace IronRuby.Runtime {
         }
 
         public static Exception/*!*/ CreateEncodingCompatibilityError(RubyEncoding/*!*/ encoding1, RubyEncoding/*!*/ encoding2) {
-            return new EncodingCompatibilityError(
-                FormatMessage("incompatible character encodings: {0}{1} and {2}{3}",
-                    encoding1.Name, encoding1.IsKCoding ? " (KCODE)" : null, encoding2.Name, encoding2.IsKCoding ? " (KCODE)" : null
-                )
-            );
+            return new EncodingCompatibilityError(FormatMessage("incompatible character encodings: {0} and {1}", encoding1.Name, encoding2.Name));
         }
 
         #region Errno
+
+        // TODO: initialize errno property
 
         public static string/*!*/ MakeMessage(string message, string/*!*/ baseMessage) {
             Assert.NotNull(baseMessage);
@@ -301,7 +298,7 @@ namespace IronRuby.Runtime {
         }
 
         public static Exception/*!*/ CreateENOENT() {
-            return new FileNotFoundException();
+            return new FileNotFoundException("No such file or directory");
         }
 
         public static Exception/*!*/ CreateENOENT(string/*!*/ message, params object[] args) {
@@ -314,6 +311,10 @@ namespace IronRuby.Runtime {
 
         public static Exception/*!*/ CreateEBADF() {
             return new BadFileDescriptorError();
+        }
+
+        public static Exception/*!*/ CreateEACCES() {
+            return new UnauthorizedAccessException();
         }
 
         #endregion

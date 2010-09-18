@@ -39,6 +39,7 @@ namespace IronRuby.StandardLibrary.Sockets {
         private static readonly MutableString BROADCAST_STRING = MutableString.CreateAscii("<broadcast>").Freeze();
 
         private Socket _socket;
+        private bool _doNotReverseLookup;
 
         [MultiRuntimeAware]
         private static readonly object BasicSocketClassKey = new object();
@@ -55,6 +56,8 @@ namespace IronRuby.StandardLibrary.Sockets {
         protected RubyBasicSocket(RubyContext/*!*/ context)
             : base(context) {
             Mode = IOMode.ReadWrite | IOMode.PreserveEndOfLines;
+            ExternalEncoding = RubyEncoding.Binary;
+            InternalEncoding = null;
         }
 
         /// <summary>
@@ -63,6 +66,8 @@ namespace IronRuby.StandardLibrary.Sockets {
         protected RubyBasicSocket(RubyContext/*!*/ context, Socket/*!*/ socket)
             : base(context, new SocketStream(socket), IOMode.ReadWrite | IOMode.PreserveEndOfLines) {
             _socket = socket;
+            ExternalEncoding = RubyEncoding.Binary;
+            InternalEncoding = null;
         }
 
         protected internal Socket/*!*/ Socket {
@@ -113,14 +118,14 @@ namespace IronRuby.StandardLibrary.Sockets {
             throw new NotSupportedException();
         }
 
-        #region Public Singleton Methods
+        #region do_not_reverse_lookup, for_fd
 
         /// <summary>
         /// Returns the value of the global reverse lookup flag.
         /// </summary>
         [RubyMethod("do_not_reverse_lookup", RubyMethodAttributes.PublicSingleton)]
-        public static bool GetDoNotReverseLookup(RubyContext/*!*/ context, RubyClass/*!*/ self) {
-            return DoNotReverseLookup(context).Value;
+        public static bool GetDoNotReverseLookup(RubyClass/*!*/ self) {
+            return DoNotReverseLookup(self.Context).Value;
         }
 
         /// <summary>
@@ -129,9 +134,28 @@ namespace IronRuby.StandardLibrary.Sockets {
         /// Defaults to false.
         /// </summary>
         [RubyMethod("do_not_reverse_lookup=", RubyMethodAttributes.PublicSingleton)]
-        public static void SetDoNotReverseLookup(RubyContext/*!*/ context, RubyClass/*!*/ self, bool value) {
-            Protocols.CheckSafeLevel(context, 4);
-            DoNotReverseLookup(context).Value = value;
+        public static void SetDoNotReverseLookup(RubyClass/*!*/ self, bool value) {
+            Protocols.CheckSafeLevel(self.Context, 4);
+            DoNotReverseLookup(self.Context).Value = value;
+        }
+
+        /// <summary>
+        /// Returns the value of the global reverse lookup flag.
+        /// </summary>
+        [RubyMethod("do_not_reverse_lookup")]
+        public static bool GetDoNotReverseLookup(RubyBasicSocket/*!*/ self) {
+            return self._doNotReverseLookup;
+        }
+
+        /// <summary>
+        /// Sets the value of the global reverse lookup flag.
+        /// If set to true, queries on remote addresses will return the numeric address but not the host name.
+        /// Defaults to false.
+        /// </summary>
+        [RubyMethod("do_not_reverse_lookup=")]
+        public static void SetDoNotReverseLookup(RubyBasicSocket/*!*/ self, bool value) {
+            Protocols.CheckSafeLevel(self.Context, 4);
+            self._doNotReverseLookup = value;
         }
 
         /// <summary>
@@ -167,7 +191,10 @@ namespace IronRuby.StandardLibrary.Sockets {
             if (how < 0 || 2 < how) {
                 throw RubyExceptions.CreateArgumentError("`how' should be either 0, 1, 2");
             }
-            self.Socket.Shutdown((SocketShutdown)how);
+            // TODO: 
+            // Webrick's (ruby\1.9.1\webrick\server.rb) use of shutdown on socket leads to subsequent scoket failures. Do close instead.
+            // self.Socket.Shutdown((SocketShutdown)how);
+            self.Socket.Close();
             return 0;
         }
 
@@ -413,13 +440,21 @@ namespace IronRuby.StandardLibrary.Sockets {
             return CreateHostEntryArray(context, GetHostEntry(hostNameOrAddress, DoNotReverseLookup(context).Value), packIpAddresses);
         }
 
-        internal static RubyArray/*!*/ GetAddressArray(RubyContext/*!*/ context, EndPoint endPoint) {
-            RubyArray result = new RubyArray(4);
+        internal RubyArray/*!*/ GetAddressArray(EndPoint/*!*/ endPoint) {
+            return GetAddressArray(Context, endPoint, _doNotReverseLookup);
+        }
 
+        internal static RubyArray/*!*/ GetAddressArray(RubyContext/*!*/ context, EndPoint/*!*/ endPoint) {
+            return GetAddressArray(context, endPoint, DoNotReverseLookup(context).Value);
+        }
+
+        internal static RubyArray/*!*/ GetAddressArray(RubyContext/*!*/ context, EndPoint/*!*/ endPoint, bool doNotReverseLookup) {
+            RubyArray result = new RubyArray(4);
+            
             IPEndPoint ep = (IPEndPoint)endPoint;
             result.Add(MutableString.CreateAscii(AddressFamilyToString(ep.AddressFamily)));
             result.Add(ep.Port);
-            result.Add(HostNameToMutableString(context, IPAddressToHostName(ep.Address, DoNotReverseLookup(context).Value)));
+            result.Add(HostNameToMutableString(context, IPAddressToHostName(ep.Address, doNotReverseLookup)));
             result.Add(MutableString.CreateAscii(ep.Address.ToString()));
             return result;
         }

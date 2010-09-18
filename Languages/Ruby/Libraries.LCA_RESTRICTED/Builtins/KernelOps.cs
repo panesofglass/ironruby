@@ -18,6 +18,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -35,8 +36,7 @@ using Microsoft.Scripting.Utils;
 namespace IronRuby.Builtins {
     [RubyModule("Kernel", Extends = typeof(Kernel))]
     public static class KernelOps {
-
-        #region initialize_copy, singleton_method_added, singleton_method_removed, singleton_method_undefined
+        #region initialize_copy
 
         [RubyMethod("initialize_copy", RubyMethodAttributes.PrivateInstance)]
         public static object InitializeCopy(RubyContext/*!*/ context, object self, object source) {
@@ -51,21 +51,6 @@ namespace IronRuby.Builtins {
             }
 
             return self;
-        }
-
-        [RubyMethod("singleton_method_added", RubyMethodAttributes.PrivateInstance | RubyMethodAttributes.Empty)]
-        public static void MethodAdded(object self, object methodName) {
-            // nop
-        }
-
-        [RubyMethod("singleton_method_removed", RubyMethodAttributes.PrivateInstance | RubyMethodAttributes.Empty)]
-        public static void MethodRemoved(object self, object methodName) {
-            // nop
-        }
-
-        [RubyMethod("singleton_method_undefined", RubyMethodAttributes.PrivateInstance | RubyMethodAttributes.Empty)]
-        public static void MethodUndefined(object self, object methodName) {
-            // nop
         }
 
         #endregion
@@ -134,16 +119,28 @@ namespace IronRuby.Builtins {
 
         [RubyMethod("Complex", RubyMethodAttributes.PrivateInstance, Compatibility = RubyCompatibility.Ruby19)]
         [RubyMethod("Complex", RubyMethodAttributes.PublicSingleton, Compatibility = RubyCompatibility.Ruby19)]
-        public static object/*!*/ ToComplex(object self, object real, [Optional]object imaginary) {
-            // TODO:
-            return real;
+        public static object ToComplex(CallSiteStorage<Func<CallSite, object, object, object, object>>/*!*/ toComplex, 
+            RubyScope/*!*/ scope, object self, object real, [DefaultParameterValue(null)]object imaginary) {
+            
+            // TODO: hack: redefines this method
+            if (!scope.RubyContext.Loader.LoadFile(scope.GlobalScope.Scope, self, MutableString.CreateAscii("complex18.rb"), LoadFlags.Require)) {
+                throw Assert.Unreachable;
+            }
+            var site = toComplex.GetCallSite("Complex", 2);
+            return site.Target(site, self, real, imaginary);
         }
 
         [RubyMethod("Rational", RubyMethodAttributes.PrivateInstance, Compatibility = RubyCompatibility.Ruby19)]
         [RubyMethod("Rational", RubyMethodAttributes.PublicSingleton, Compatibility = RubyCompatibility.Ruby19)]
-        public static object/*!*/ ToRational(object self, object numerator, [Optional]object denominator) {
-            // TODO:
-            return numerator;
+        public static object/*!*/ ToRational(CallSiteStorage<Func<CallSite, object, object, object, object>>/*!*/ toRational, 
+            RubyScope/*!*/ scope, object self, object numerator, [DefaultParameterValue(null)]object denominator) {
+
+            // TODO: hack: redefines this method
+            if (!scope.RubyContext.Loader.LoadFile(scope.GlobalScope.Scope, self, MutableString.CreateAscii("rational18.rb"), LoadFlags.Require)) {
+                throw Assert.Unreachable;
+            }
+            var site = toRational.GetCallSite("Rational", 2);
+            return site.Target(site, self, numerator, denominator);
         }
 
         #endregion
@@ -196,27 +193,27 @@ namespace IronRuby.Builtins {
         #region throw, catch, loop, proc, lambda
 
         private sealed class ThrowCatchUnwinder : StackUnwinder {
-            public readonly string/*!*/ Label;
+            public readonly object Label;
 
-            internal ThrowCatchUnwinder(string/*!*/ label, object returnValue)
+            internal ThrowCatchUnwinder(object label, object returnValue)
                 : base(returnValue) {
                 Label = label;
             }
         }
 
         [ThreadStatic]
-        private static Stack<string/*!*/> _catchSymbols;
+        private static Stack<object> _catchSymbols;
 
         [RubyMethod("catch", RubyMethodAttributes.PrivateInstance)]
         [RubyMethod("catch", RubyMethodAttributes.PublicSingleton)]
-        public static object Catch(BlockParam/*!*/ block, object self, [DefaultProtocol, NotNull]string/*!*/ label) {
+        public static object Catch(BlockParam/*!*/ block, object self, object label) {
             if (block == null) {
                 throw RubyExceptions.NoBlockGiven();
             }
 
             try {
                 if (_catchSymbols == null) {
-                    _catchSymbols = new Stack<string>();
+                    _catchSymbols = new Stack<object>();
                 }
                 _catchSymbols.Push(label);
 
@@ -225,7 +222,7 @@ namespace IronRuby.Builtins {
                     block.Yield(label, out result);
                     return result;
                 } catch (ThrowCatchUnwinder unwinder) {
-                    if (unwinder.Label == label) {
+                    if (ReferenceEquals(unwinder.Label, label)) {
                         return unwinder.ReturnValue;
                     }
 
@@ -238,9 +235,9 @@ namespace IronRuby.Builtins {
 
         [RubyMethod("throw", RubyMethodAttributes.PrivateInstance)]
         [RubyMethod("throw", RubyMethodAttributes.PublicSingleton)]
-        public static void Throw(object self, [DefaultProtocol, NotNull]string/*!*/ label, [DefaultParameterValue(null)]object returnValue) {
-            if (_catchSymbols == null || !_catchSymbols.Contains(label)) {
-                throw RubyExceptions.CreateNameError("uncaught throw `{0}'", label);
+        public static void Throw(RubyContext/*!*/ context, object self, object label, [DefaultParameterValue(null)]object returnValue) {
+            if (_catchSymbols == null || !_catchSymbols.Contains(label, ReferenceEqualityComparer.Instance)) {
+                throw RubyExceptions.CreateNameError("uncaught throw `{0}'", context.Inspect(label).ToAsciiString(false));
             }
 
             throw new ThrowCatchUnwinder(label, returnValue);
@@ -261,18 +258,24 @@ namespace IronRuby.Builtins {
             }
         }
 
-        // TODO: in Ruby 1.9, these two methods will do different things so we will likely have to have two
-        // separate implementations of these methods
         [RubyMethod("lambda", RubyMethodAttributes.PrivateInstance)]
         [RubyMethod("lambda", RubyMethodAttributes.PublicSingleton)]
-        [RubyMethod("proc", RubyMethodAttributes.PrivateInstance)]
-        [RubyMethod("proc", RubyMethodAttributes.PublicSingleton)]
         public static Proc/*!*/ CreateLambda(BlockParam/*!*/ block, object self) {
             if (block == null) {
                 throw RubyExceptions.CreateArgumentError("tried to create Proc object without a block");
             }
 
             return block.Proc.ToLambda(null);
+        }
+
+        [RubyMethod("proc", RubyMethodAttributes.PrivateInstance)]
+        [RubyMethod("proc", RubyMethodAttributes.PublicSingleton)]
+        public static Proc/*!*/ CreateProc(BlockParam/*!*/ block, object self) {
+            if (block == null) {
+                throw RubyExceptions.CreateArgumentError("tried to create Proc object without a block");
+            }
+
+            return block.Proc;
         }
 
         #endregion
@@ -363,12 +366,18 @@ namespace IronRuby.Builtins {
         #endregion
 
 
-        #region ==, ===, =~, eql?, equal?, hash, to_s, inspect, to_a, 1.9: !, !=, !~
+        #region =~, !~, ===, <=>, eql?, hash, to_s, inspect, to_a
 
         [RubyMethod("=~")]
-        public static bool Match(object self, object other) {
+        public static object Match(object self, object other) {
             // Default implementation of match that is overridden in descendents (notably String and Regexp)
-            return false;
+            return null;
+        }
+
+        [RubyMethod("!~")]
+        public static bool NotMatch(BinaryOpStorage/*!*/ match, object self, object other) {
+            var site = match.GetCallSite("=~", 1);
+            return RubyOps.IsFalse(site.Target(site, self, other));
         }
 
         // calls == by default
@@ -377,48 +386,43 @@ namespace IronRuby.Builtins {
             return Protocols.IsEqual(equals, self, other);
         }
 
-        [RubyMethod("==")]
+        // calls == by default
+        [RubyMethod("<=>")]
+        public static object Compare(BinaryOpStorage/*!*/ equals, object self, object other) {
+            return Protocols.IsEqual(equals, self, other) ? ScriptingRuntimeHelpers.Int32ToObject(0) : null;
+        }
+
+        // This method is a binder intrinsic and the behavior of the binder needs to be adjusted appropriately if changed.
         [RubyMethod("eql?")]
         public static bool ValueEquals([NotNull]IRubyObject/*!*/ self, object other) {
             return self.BaseEquals(other);
         }
 
-        [RubyMethod("==")]
+        // This method is a binder intrinsic and the behavior of the binder needs to be adjusted appropriately if changed.
         [RubyMethod("eql?")]
         public static bool ValueEquals(object self, object other) {
             return Object.Equals(self, other);
         }
 
+        // This method is a binder intrinsic and the behavior of the binder needs to be adjusted appropriately if changed.
         [RubyMethod("hash")]
         public static int Hash([NotNull]IRubyObject/*!*/ self) {
             return self.BaseGetHashCode();
         }
 
+        // This method is a binder intrinsic and the behavior of the binder needs to be adjusted appropriately if changed.
         [RubyMethod("hash")]
         public static int Hash(object self) {
             return self == null ? RubyUtils.NilObjectId : self.GetHashCode();
         }
 
-        [RubyMethod("equal?")]
-        public static bool IsEqual(object self, object other) {
-            // Comparing object IDs is (potentially) expensive because it forces us
-            // to generate InstanceData and a new object ID
-            if (self == other) {
-                return true;
-            }
-
-            if (RubyUtils.IsRubyValueType(self) && RubyUtils.IsRubyValueType(other)) {
-                return object.Equals(self, other);
-            }
-
-            return false;
-        }
-
+        // This method is a binder intrinsic and the behavior of the binder needs to be adjusted appropriately if changed.
         [RubyMethod("to_s")]
         public static MutableString/*!*/ ToS([NotNull]IRubyObject/*!*/ self) {
             return RubyUtils.ObjectBaseToMutableString(self);
         }
 
+        // This method is a binder intrinsic and the behavior of the binder needs to be adjusted appropriately if changed.
         [RubyMethod("to_s")]
         public static MutableString/*!*/ ToS(object self) {
             return self == null ? MutableString.CreateEmpty() : MutableString.Create(self.ToString(), RubyEncoding.UTF8);
@@ -440,14 +444,6 @@ namespace IronRuby.Builtins {
                 var site = tosConversion.GetSite(ConvertToSAction.Make(context));
                 return site.Target(site, self);
             }
-        }
-
-        [RubyMethod("to_a")]
-        public static RubyArray/*!*/ ToA(RubyContext/*!*/ context, object self) {
-            RubyArray result = new RubyArray();
-            result.Add(self);
-            result.IsTainted |= context.IsObjectTainted(self);
-            return result;
         }
 
         #endregion
@@ -544,7 +540,7 @@ namespace IronRuby.Builtins {
             CallSiteStorage<Func<CallSite, RubyModule, object, object>>/*!*/ extendedStorage,
             object self, [NotNull]RubyModule/*!*/ module, [NotNullItems]params RubyModule/*!*/[]/*!*/ modules) {
 
-            Assert.NotNull(self, modules);
+            Assert.NotNull(modules);
 
             // TODO: this is strange:
             RubyUtils.RequireMixins(module.GetOrCreateSingletonClass(), modules);
@@ -645,8 +641,7 @@ namespace IronRuby.Builtins {
 
         #endregion
 
-
-        #region eval, instance_eval, 1.9: instance_exec
+        #region eval
 
         [RubyMethod("eval", RubyMethodAttributes.PrivateInstance)]
         [RubyMethod("eval", RubyMethodAttributes.PublicSingleton)]
@@ -671,25 +666,6 @@ namespace IronRuby.Builtins {
             [NotNull]Proc/*!*/ procBinding, [Optional, NotNull]MutableString file, [DefaultParameterValue(1)]int line) {
 
             return RubyUtils.Evaluate(code, procBinding.LocalScope, procBinding.LocalScope.SelfObject, null, file, line);
-        }
-
-        [RubyMethod("instance_eval")]
-        public static object Evaluate(RubyScope/*!*/ scope, object self, [NotNull]MutableString/*!*/ code,
-            [Optional, NotNull]MutableString file, [DefaultParameterValue(1)]int line) {
-
-            RubyClass singleton = scope.RubyContext.GetOrCreateSingletonClass(self);
-            return RubyUtils.Evaluate(code, scope, self, singleton, file, line);
-        }
-
-        [RubyMethod("instance_eval")]
-        public static object InstanceEval([NotNull]BlockParam/*!*/ block, object self) {
-            return RubyUtils.EvaluateInSingleton(self, block, null);
-        }
-
-        // This method is not available in 1.8 so far, but since the usual workaround is very inefficient it is useful to have it in 1.8 as well.
-        [RubyMethod("instance_exec")]
-        public static object InstanceExec([NotNull]BlockParam/*!*/ block, object self, params object[]/*!*/ args) {
-            return RubyUtils.EvaluateInSingleton(self, block, args);
         }
 
         #endregion
@@ -781,8 +757,9 @@ namespace IronRuby.Builtins {
 
         #endregion
 
-        #region respond_to?, method_missing
+        #region respond_to?
 
+        // This method is a binder intrinsic and the behavior of the binder needs to be adjusted appropriately if changed.
         [RubyMethod("respond_to?")]
         public static bool RespondTo(RubyContext/*!*/ context, object self,
             [DefaultProtocol, NotNull]string/*!*/ methodName, [Optional]bool includePrivate) {
@@ -790,24 +767,17 @@ namespace IronRuby.Builtins {
             return context.ResolveMethod(self, methodName, includePrivate).Found;
         }
 
-        [RubyMethod("method_missing", RubyMethodAttributes.PrivateInstance)]
-        [RubyMethod("method_missing", RubyMethodAttributes.PublicSingleton)]
-        [RubyStackTraceHidden]
-        public static object MethodMissing(RubyContext/*!*/ context, object/*!*/ self, [NotNull]RubySymbol/*!*/ name, params object[]/*!*/ args) {
-            throw RubyExceptions.CreateMethodMissing(context, self, name.ToString());
-        }
-
         #endregion
 
-        #region __send__, send, 1.9: public_send
+        #region send, TODO: 1.9: public_send
 
-        [RubyMethod("send"), RubyMethod("__send__")]
+        [RubyMethod("send")]
         public static object SendMessage(RubyScope/*!*/ scope, object self) {
             throw RubyExceptions.CreateArgumentError("no method name given");
         }
 
         // ARGS: 0
-        [RubyMethod("send"), RubyMethod("__send__")]
+        [RubyMethod("send")]
         public static object SendMessage(RubyScope/*!*/ scope, object self, [DefaultProtocol, NotNull]string/*!*/ methodName) {
             var site = scope.RubyContext.GetOrCreateSendSite<Func<CallSite, RubyScope, object, object>>(
                 methodName, new RubyCallSignature(0, RubyCallFlags.HasScope | RubyCallFlags.HasImplicitSelf)
@@ -816,7 +786,7 @@ namespace IronRuby.Builtins {
         }
 
         // ARGS: 0&
-        [RubyMethod("send"), RubyMethod("__send__")]
+        [RubyMethod("send")]
         public static object SendMessage(RubyScope/*!*/ scope, BlockParam block, object self, [DefaultProtocol, NotNull]string/*!*/ methodName) {
             var site = scope.RubyContext.GetOrCreateSendSite<Func<CallSite, RubyScope, object, Proc, object>>(
                 methodName, new RubyCallSignature(0, RubyCallFlags.HasScope | RubyCallFlags.HasImplicitSelf | RubyCallFlags.HasBlock)
@@ -825,7 +795,7 @@ namespace IronRuby.Builtins {
         }
 
         // ARGS: 1
-        [RubyMethod("send"), RubyMethod("__send__")]
+        [RubyMethod("send")]
         public static object SendMessage(RubyScope/*!*/ scope, object self, [DefaultProtocol, NotNull]string/*!*/ methodName,
             object arg1) {
 
@@ -837,7 +807,7 @@ namespace IronRuby.Builtins {
         }
 
         // ARGS: 1&
-        [RubyMethod("send"), RubyMethod("__send__")]
+        [RubyMethod("send")]
         public static object SendMessage(RubyScope/*!*/ scope, BlockParam block, object self, [DefaultProtocol, NotNull]string/*!*/ methodName,
             object arg1) {
 
@@ -848,7 +818,7 @@ namespace IronRuby.Builtins {
         }
 
         // ARGS: 2
-        [RubyMethod("send"), RubyMethod("__send__")]
+        [RubyMethod("send")]
         public static object SendMessage(RubyScope/*!*/ scope, object self, [DefaultProtocol, NotNull]string/*!*/ methodName,
             object arg1, object arg2) {
 
@@ -860,7 +830,7 @@ namespace IronRuby.Builtins {
         }
 
         // ARGS: 2&
-        [RubyMethod("send"), RubyMethod("__send__")]
+        [RubyMethod("send")]
         public static object SendMessage(RubyScope/*!*/ scope, BlockParam block, object self, [DefaultProtocol, NotNull]string/*!*/ methodName,
             object arg1, object arg2) {
 
@@ -871,7 +841,7 @@ namespace IronRuby.Builtins {
         }
 
         // ARGS: 3
-        [RubyMethod("send"), RubyMethod("__send__")]
+        [RubyMethod("send")]
         public static object SendMessage(RubyScope/*!*/ scope, object self, [DefaultProtocol, NotNull]string/*!*/ methodName,
             object arg1, object arg2, object arg3) {
 
@@ -883,7 +853,7 @@ namespace IronRuby.Builtins {
         }
 
         // ARGS: 3&
-        [RubyMethod("send"), RubyMethod("__send__")]
+        [RubyMethod("send")]
         public static object SendMessage(RubyScope/*!*/ scope, BlockParam block, object self, [DefaultProtocol, NotNull]string/*!*/ methodName,
             object arg1, object arg2, object arg3) {
 
@@ -894,7 +864,7 @@ namespace IronRuby.Builtins {
         }
 
         // ARGS: N
-        [RubyMethod("send"), RubyMethod("__send__")]
+        [RubyMethod("send")]
         public static object SendMessage(RubyScope/*!*/ scope, object self, [DefaultProtocol, NotNull]string/*!*/ methodName,
             params object[]/*!*/ args) {
             
@@ -906,7 +876,7 @@ namespace IronRuby.Builtins {
         }
 
         // ARGS: N&
-        [RubyMethod("send"), RubyMethod("__send__")]
+        [RubyMethod("send")]
         public static object SendMessage(RubyScope/*!*/ scope, BlockParam block, object self, [DefaultProtocol, NotNull]string/*!*/ methodName,
             params object[]/*!*/ args) {
 
@@ -1240,43 +1210,50 @@ namespace IronRuby.Builtins {
 
         [RubyMethod("test", RubyMethodAttributes.PrivateInstance)]
         [RubyMethod("test", RubyMethodAttributes.PublicSingleton)]
-        public static object Test(
-            RubyContext/*!*/ context,
-            object self,
-            int cmd,
-            [DefaultProtocol, NotNull]MutableString/*!*/ file1) {
+        public static object Test(ConversionStorage<MutableString>/*!*/ toPath, object self, [NotNull]MutableString/*!*/ cmd, object path) {
+            if (cmd.IsEmpty) {
+                throw RubyExceptions.CreateTypeConversionError("String", "Integer");
+            }
+            return Test(toPath, self, cmd.GetChar(0), path);
+        }
+
+        [RubyMethod("test", RubyMethodAttributes.PrivateInstance)]
+        [RubyMethod("test", RubyMethodAttributes.PublicSingleton)]
+        public static object Test(ConversionStorage<MutableString>/*!*/ toPath, object self, [DefaultProtocol]int cmd, object path) {
+            RubyContext context = toPath.Context;
+            MutableString pathStr = Protocols.CastToPath(toPath, path);
             cmd &= 0xFF;
             switch (cmd) {
                 case 'A':
-                    return RubyFileOps.RubyStatOps.AccessTime(RubyFileOps.RubyStatOps.Create(context, file1));
+                    return RubyFileOps.RubyStatOps.AccessTime(RubyFileOps.RubyStatOps.Create(context, pathStr));
 
                 case 'b':
-                    return RubyFileOps.RubyStatOps.IsBlockDevice(RubyFileOps.RubyStatOps.Create(context, file1));
+                    return RubyFileOps.RubyStatOps.IsBlockDevice(RubyFileOps.RubyStatOps.Create(context, pathStr));
 
                 case 'C':
-                    return RubyFileOps.RubyStatOps.CreateTime(RubyFileOps.RubyStatOps.Create(context, file1));
+                    return RubyFileOps.RubyStatOps.CreateTime(RubyFileOps.RubyStatOps.Create(context, pathStr));
 
                 case 'c':
-                    return RubyFileOps.RubyStatOps.IsCharDevice(RubyFileOps.RubyStatOps.Create(context, file1));
+                    return RubyFileOps.RubyStatOps.IsCharDevice(RubyFileOps.RubyStatOps.Create(context, pathStr));
 
                 case 'd':
-                    return FileTest.DirectoryExists(context, file1);
+                    return FileTest.DirectoryExists(context, pathStr);
 
                 case 'e':
                 case 'f':
-                    return FileTest.FileExists(context, file1);
+                    return FileTest.FileExists(context, pathStr);
 
                 case 'g':
-                    return RubyFileOps.RubyStatOps.IsSetGid(RubyFileOps.RubyStatOps.Create(context, file1));
+                    return RubyFileOps.RubyStatOps.IsSetGid(RubyFileOps.RubyStatOps.Create(context, pathStr));
 
                 case 'G':
-                    return RubyFileOps.RubyStatOps.IsGroupOwned(RubyFileOps.RubyStatOps.Create(context, file1));
+                    return RubyFileOps.RubyStatOps.IsGroupOwned(RubyFileOps.RubyStatOps.Create(context, pathStr));
 
                 case 'k':
-                    return RubyFileOps.RubyStatOps.IsSticky(RubyFileOps.RubyStatOps.Create(context, file1));
+                    return RubyFileOps.RubyStatOps.IsSticky(RubyFileOps.RubyStatOps.Create(context, pathStr));
 
                 case 'l':
-                    return RubyFileOps.RubyStatOps.IsSymLink(RubyFileOps.RubyStatOps.Create(context, file1));
+                    return RubyFileOps.RubyStatOps.IsSymLink(RubyFileOps.RubyStatOps.Create(context, pathStr));
 
                 case 'M': throw new NotImplementedException();
                 case 'O': throw new NotImplementedException();
@@ -1569,7 +1546,7 @@ namespace IronRuby.Builtins {
 
         [RubyMethod("p", RubyMethodAttributes.PrivateInstance)]
         [RubyMethod("p", RubyMethodAttributes.PublicSingleton)]
-        public static void PrintInspect(BinaryOpStorage/*!*/ writeStorage, UnaryOpStorage/*!*/ inspectStorage, ConversionStorage<MutableString>/*!*/ tosConversion,
+        public static object PrintInspect(BinaryOpStorage/*!*/ writeStorage, UnaryOpStorage/*!*/ inspectStorage, ConversionStorage<MutableString>/*!*/ tosConversion,
             object self, params object[]/*!*/ args) {
 
             var inspect = inspectStorage.GetCallSite("inspect");
@@ -1581,6 +1558,14 @@ namespace IronRuby.Builtins {
             // no dynamic dispatch to "puts":
             foreach (var arg in inspectedArgs) {
                 PrintOps.Puts(writeStorage, writeStorage.Context.StandardOutput, arg);
+            }
+
+            if (args.Length == 0) {
+                return null;
+            } else if (args.Length == 1) {
+                return args[0];
+            } else {
+                return new RubyArray(args);
             }
         }
 
@@ -1693,28 +1678,29 @@ namespace IronRuby.Builtins {
             PrintOps.ReportWarning(writeStorage, tosConversion, message);
         }
 
-        // TODO: not supported in Ruby 1.9
-        [RubyMethod("getc", RubyMethodAttributes.PrivateInstance)]
-        [RubyMethod("getc", RubyMethodAttributes.PublicSingleton)]
-        public static object ReadInputCharacter(UnaryOpStorage/*!*/ getcStorage, object self) {
-            getcStorage.Context.ReportWarning("getc is obsolete; use STDIN.getc instead");
-            var site = getcStorage.GetCallSite("getc", 0);
-            return site.Target(site, getcStorage.Context.StandardInput);
+        [RubyMethod("gets", RubyMethodAttributes.PrivateInstance)]
+        [RubyMethod("gets", RubyMethodAttributes.PublicSingleton)]
+        public static object ReadInputLine(CallSiteStorage<Func<CallSite, object, object>>/*!*/ storage, object self) {
+            var site = storage.GetCallSite("gets", 0);
+            return site.Target(site, storage.Context.StandardInput);
         }
 
         [RubyMethod("gets", RubyMethodAttributes.PrivateInstance)]
         [RubyMethod("gets", RubyMethodAttributes.PublicSingleton)]
-        public static object ReadInputLine(CallSiteStorage<Func<CallSite, object, MutableString, object>>/*!*/ storage, object self) {
-            return ReadInputLine(storage, self, storage.Context.InputSeparator);
-        }
-
-        [RubyMethod("gets", RubyMethodAttributes.PrivateInstance)]
-        [RubyMethod("gets", RubyMethodAttributes.PublicSingleton)]
-        public static object ReadInputLine(CallSiteStorage<Func<CallSite, object, MutableString, object>>/*!*/ storage, object self,
+        public static object ReadInputLine(CallSiteStorage<Func<CallSite, object, object, object>>/*!*/ storage, object self, 
             [NotNull]MutableString/*!*/ separator) {
 
             var site = storage.GetCallSite("gets", 1);
             return site.Target(site, storage.Context.StandardInput, separator);
+        }
+
+        [RubyMethod("gets", RubyMethodAttributes.PrivateInstance)]
+        [RubyMethod("gets", RubyMethodAttributes.PublicSingleton)]
+        public static object ReadInputLine(CallSiteStorage<Func<CallSite, object, object, object, object>>/*!*/ storage, object self,
+            [NotNull]MutableString/*!*/ separator, [DefaultProtocol]int limit) {
+
+            var site = storage.GetCallSite("gets", 2);
+            return site.Target(site, storage.Context.StandardInput, separator, limit);
         }
 
         #endregion
@@ -1838,6 +1824,16 @@ namespace IronRuby.Builtins {
 
         //trace_var
         //untrace_var
+
+        #endregion
+
+        #region to_enum
+
+        [RubyMethod("to_enum")]
+        [RubyMethod("enum_for")]
+        public static Enumerator/*!*/ Create(object self, [DefaultProtocol, NotNull]string/*!*/ enumeratorName, params object[]/*!*/ targetParameters) {
+            return new Enumerator(self, enumeratorName, targetParameters);
+        }
 
         #endregion
     }

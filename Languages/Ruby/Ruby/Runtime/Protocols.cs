@@ -26,6 +26,8 @@ using Microsoft.Scripting.Actions;
 using Microsoft.Scripting.Math;
 using Microsoft.Scripting.Runtime;
 using Microsoft.Scripting.Utils;
+using System.Collections.Generic;
+using System.Reflection;
 
 namespace IronRuby.Runtime {
     /// <summary>
@@ -109,14 +111,18 @@ namespace IronRuby.Runtime {
 
         #endregion
 
-        #region CastToString, CastToPath, TryCastToString, ConvertToString
+        #region CastToString, CastToPath, TryCastToString, ConvertToString, ConvertToEncoding
 
         /// <summary>
         /// Converts an object to string using to_str protocol (<see cref="ConvertToStrAction"/>).
         /// </summary>
         public static MutableString/*!*/ CastToString(ConversionStorage<MutableString>/*!*/ stringCast, object obj) {
             var site = stringCast.GetSite(ConvertToStrAction.Make(stringCast.Context));
-            return site.Target(site, obj);
+            var result = site.Target(site, obj);
+            if (result == null) {
+                throw RubyExceptions.CreateTypeConversionError("nil", "String");
+            }
+            return result;
         }
 
         /// <summary>
@@ -177,9 +183,15 @@ namespace IronRuby.Runtime {
             }
         }
 
+        public static RubyEncoding ConvertToEncoding(ConversionStorage<MutableString>/*!*/ toStr, object obj) {
+            return (obj == null) ? null :
+                   obj as RubyEncoding ??
+                   toStr.Context.GetRubyEncoding(Protocols.CastToString(toStr, obj));
+        }
+
         #endregion
 
-        #region CastToArray, TryCastToArray, TryConvertToArray, Splat
+        #region CastToArray, TryCastToArray, TryConvertToArray, Splat, Options
 
         public static IList/*!*/ CastToArray(ConversionStorage<IList>/*!*/ arrayCast, object obj) {
             var site = arrayCast.GetSite(ConvertToArrayAction.Make(arrayCast.Context));
@@ -196,9 +208,28 @@ namespace IronRuby.Runtime {
             return site.Target(site, obj);
         }
 
-        internal static IList ConvertToArraySplat(RubyContext/*!*/ context, object splattee) {
-            var site = context.GetClassOf(splattee).ToArraySplatSite;
+        internal static IList ImplicitTrySplat(RubyContext/*!*/ context, object splattee) {
+            var site = context.GetClassOf(splattee).ToImplicitTrySplatSite;
             return site.Target(site, splattee) as IList;
+        }
+
+        public static void TryConvertToOptions(ConversionStorage<IDictionary<object, object>>/*!*/ toHash,
+            ref IDictionary<object, object> options, ref object param1, ref object param2) {
+
+            if (options == null && param1 != Missing.Value) {
+                var toHashSite = toHash.GetSite(TryConvertToHashAction.Make(toHash.Context));
+                if (param2 != Missing.Value) {
+                    options = toHashSite.Target(toHashSite, param2);
+                    if (options != null) {
+                        param2 = Missing.Value;
+                    }
+                } else {
+                    options = toHashSite.Target(toHashSite, param1);
+                    if (options != null) {
+                        param1 = Missing.Value;
+                    }
+                }
+            }
         }
 
         #endregion

@@ -380,7 +380,7 @@ class Miscellaneous
     attr :ruby_callable_called
     def get_a_ruby_callable
         @ruby_callable_called = false
-        lambda { @ruby_callable_called = true }
+        proc { @ruby_callable_called = true }
     end
     
     def to_s
@@ -443,20 +443,6 @@ class Number
 end
 
 self.number = Number.new(100)
-
-#------------------------------------------------------------------------------
-class RubyComparable
-    include Comparable
-    def initialize val
-        @val = val
-    end
-    
-    def <=>(other)
-        @val <=> other
-    end
-end
-
-self.ruby_comparable = RubyComparable.new(100)
 
 #------------------------------------------------------------------------------
 class Methods
@@ -543,11 +529,6 @@ class SanityTest
         assert_equal((main.number - 1), 99)
         assert_equal((main.number * 2), 200)
         assert_equal((main.number / 2), 50)
-        
-        # RubyComparable
-        assert_equal((main.ruby_comparable == 100), true)
-        assert_equal((main.ruby_comparable > 100), false)
-        assert_equal((main.ruby_comparable >= 100), true)
         
         # Methods
         assert_equal Methods.default_values(100), 'a:100 b:2'.to_clr_string
@@ -756,11 +737,52 @@ end
         }
 
         public void Dlr_Comparable() {
-            var scope = CreateInteropScope();
-            object ruby_comparable = scope.GetVariable("ruby_comparable");
-            AreEqual(MyBinaryOperationBinder.Invoke(ExpressionType.Equal, ruby_comparable, 100), true);
-            AreEqual(MyBinaryOperationBinder.Invoke(ExpressionType.GreaterThan, ruby_comparable, 100), false);
-            AreEqual(MyBinaryOperationBinder.Invoke(ExpressionType.LessThanOrEqual, ruby_comparable, 100), true);
+            object comparable = Engine.Execute(@"
+class RubyComparable
+    include Comparable
+    def initialize val
+        @val = val
+    end
+    
+    def <=>(other)
+        @val <=> other
+    end
+end
+
+RubyComparable.new(100)
+");
+
+            AreEqual(MyBinaryOperationBinder.Invoke(ExpressionType.Equal, comparable, 100), true);
+            AreEqual(MyBinaryOperationBinder.Invoke(ExpressionType.GreaterThan, comparable, 100), false);
+            AreEqual(MyBinaryOperationBinder.Invoke(ExpressionType.LessThanOrEqual, comparable, 100), true);
+        }
+
+        public void Dlr_Equatable() {
+            object equatable = Engine.Execute(@"
+class RubyEquatable
+    def initialize val
+      @val = val
+    end
+    
+    def ==(other)
+      @val == other
+    end
+end
+
+RubyEquatable.new(100)
+");
+
+            AreEqual(MyBinaryOperationBinder.Invoke(ExpressionType.Equal, equatable, 100), true);
+            AreEqual(MyBinaryOperationBinder.Invoke(ExpressionType.Equal, equatable, 101), false);
+            AreEqual(MyBinaryOperationBinder.Invoke(ExpressionType.NotEqual, equatable, 100), false);
+            AreEqual(MyBinaryOperationBinder.Invoke(ExpressionType.NotEqual, equatable, 101), true);
+#if CLR4
+            dynamic dynamicEquatable = equatable;
+            Assert((bool)(dynamicEquatable == 100));
+            Assert(!(bool)(dynamicEquatable == 101));
+            Assert(!(bool)(dynamicEquatable != 100));
+            Assert((bool)(dynamicEquatable != 101));
+#endif
         }
 
         public void Dlr_RubyObjects() {

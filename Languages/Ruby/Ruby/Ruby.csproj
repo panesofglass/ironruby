@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
-  <Import Project="$(SolutionDir)..\Solutions\Common.proj" />
+  <Import Project="$(ProjectDir)..\..\..\Solutions\Common.proj" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -137,7 +137,7 @@
     </Reference>
     <Reference Include="System.Numerics, Version=2.0.5.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35" Condition="'$(TargetFrameworkVersion)' == 'v4.0' ">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>$(SilverlightPath)\System.Numerics.dll</HintPath>
+      <HintPath>$(SilverlightSdkPath)\System.Numerics.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
@@ -163,7 +163,6 @@
     <Compile Include="Builtins\CharacterMap.cs" />
     <Compile Include="Builtins\ConsoleStream.cs" />
     <None Include="Builtins\Subclasses.Generator.rb" />
-    <Compile Include="Builtins\MutableString.KBinaryContent.cs" />
     <Compile Include="Builtins\RubyIO.Subclass.cs" />
     <Compile Include="Builtins\IOMode.cs" />
     <Compile Include="Builtins\MutableStringBuilder.cs" />
@@ -199,6 +198,7 @@
     <Compile Include="Builtins\Stubs.cs" />
     <Compile Include="Builtins\Subclasses.Generated.cs" />
     <Compile Include="Builtins\TypeDescriptor.Generated.cs" />
+    <Compile Include="Compiler\Ast\Definitions\LambdaDefinition.cs" />
     <Compile Include="Compiler\Ast\Expressions\ConditionalJumpExpression.cs" />
     <Compile Include="Compiler\Ast\Expressions\EncodingExpression.cs" />
     <Compile Include="Compiler\Ast\Expressions\FileLiteral.cs" />
@@ -210,6 +210,7 @@
     <Compile Include="Compiler\Ast\LeftValues\Placeholder.cs" />
     <Compile Include="Compiler\Ast\Instructions\ReducibleEmptyExpression.cs" />
     <Compile Include="Compiler\Ast\ScopeBuilder.cs" />
+    <Compile Include="Compiler\Ast\SplattedArgument.cs" />
     <Compile Include="Compiler\Ast\Statements.cs" />
     <Compile Include="Compiler\Ast\Statements\ConditionalStatement.cs" />
     <Compile Include="Compiler\Ast\CallSiteBuilder.cs" />
@@ -222,6 +223,8 @@
     <Compile Include="Hosting\RubyService.cs" />
     <Compile Include="Runtime\BinaryContentProvider.cs" />
     <Compile Include="Runtime\CallSiteStorages.cs" />
+    <Compile Include="Runtime\Calls\BlockDispatcherProcN.cs" />
+    <Compile Include="Runtime\Calls\BlockDispatcherUnsplatProcN.cs" />
     <Compile Include="Runtime\Calls\RubyScopeMethodMissingInfo.cs" />
     <Compile Include="Runtime\Calls\LibraryOverloadInfo.cs" />
     <Compile Include="Runtime\ConstantSiteCache.cs" />
@@ -336,7 +339,6 @@
     <Compile Include="Compiler\Ast\LeftValues\LeftValue.cs" />
     <Compile Include="Compiler\Ast\LeftValues\CompoundLeftValue.cs" />
     <Compile Include="Compiler\Ast\Assignments\MemberAssignmentExpression.cs" />
-    <Compile Include="Compiler\Ast\Assignments\CompoundRightValue.cs" />
     <Compile Include="Compiler\Ast\Assignments\SimpleAssignmentExpression.cs" />
     <Compile Include="Compiler\Ast\Block.cs" />
     <Compile Include="Compiler\Ast\BlockReference.cs" />

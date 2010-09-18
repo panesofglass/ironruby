@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
-  <Import Project="$(SolutionDir)..\Solutions\Common.proj" />
+  <Import Project="$(ProjectDir)..\..\..\Solutions\Common.proj" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -122,6 +122,7 @@
     <Compile Include="Builtins\Comparable.cs" />
     <Compile Include="Builtins\Dir.cs" />
     <Compile Include="Builtins\Enumerable.cs" />
+    <Compile Include="Builtins\Enumerator.cs" />
     <Compile Include="Builtins\EnvironmentSingletonOps.cs" />
     <Compile Include="Builtins\Errno.cs" />
     <Compile Include="Builtins\ExceptionOps.cs" />
@@ -166,7 +167,6 @@
     <Compile Include="Builtins\UnboundMethod.cs" />
     <Compile Include="Builtins\RubyEncoder.cs" />
     <Compile Include="Digest\Digest.cs" />
-    <Compile Include="Enumerator\Enumerator.cs" />
     <Compile Include="Extensions\CharOps.cs" />
     <Compile Include="Extensions\ClrBigInteger.cs" />
     <Compile Include="Extensions\ClrFloat.cs" />
@@ -235,7 +235,7 @@
     </Reference>
     <Reference Include="System.Numerics, Version=2.0.5.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35" Condition="'$(TargetFrameworkVersion)' == 'v4.0'">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>$(SilverlightPath)\System.Numerics.dll</HintPath>
+      <HintPath>$(SilverlightSdkPath)\System.Numerics.dll</HintPath>
     </Reference>
     <Reference Include="System.Core, Version=2.0.5.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e">
       <SpecificVersion>False</SpecificVersion>

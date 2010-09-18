@@ -150,11 +150,7 @@ namespace IronRuby.Builtins {
             }
 
             public override Content/*!*/ SwitchToStringContent() {
-                if (_owner._encoding.IsKCoding) {
-                    return SwitchToBinary();
-                } else {
-                    return this;
-                }
+                return this;
             }
 
             public override Content/*!*/ SwitchToMutableContent() {
@@ -168,6 +164,10 @@ namespace IronRuby.Builtins {
 
             public override void CheckEncoding() {
                 GetDataByteCount();
+            }
+
+            public override bool ContainsInvalidCharacters() {
+                return Utils.ContainsInvalidCharacters(_data.ToCharArray(), 0, _data.Length, _owner._encoding.StrictEncoding);
             }
 
             #endregion

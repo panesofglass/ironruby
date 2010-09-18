@@ -87,8 +87,8 @@ namespace IronRuby.Tests {
             }
 #endif
         }
-        
-        public void Tokenizer1() {
+     
+        public void Parser1() {
             LoggingErrorSink log = new LoggingErrorSink();
 
             List<Tokens> tokens;
@@ -140,27 +140,6 @@ namespace IronRuby.Tests {
 
             log.Errors.Clear();
 
-            tokens = GetRubyTokens(log, "f (1,2) {}");
-
-            Assert(tokens.ToArray().ValueEquals(new[] {
-                Tokens.Identifier,
-                Tokens.LeftArgParenthesis,
-                Tokens.Integer,
-                Tokens.Comma,
-                Tokens.Integer,
-                Tokens.RightParenthesis,
-                Tokens.LeftBlockArgBrace,
-                Tokens.RightBrace,
-                Tokens.EndOfFile,
-            }));
-
-            Assert(log.Errors.Count == 1 &&
-                log.Errors[0].Severity == Severity.Warning
-            );
-
-            log.Errors.Clear();
-
-            
             tokens = GetRubyTokens(log, "f \"a#{g.h /x/}\" do\nend");
 
             Assert(tokens.ToArray().ValueEquals(new[] {
@@ -186,9 +165,107 @@ namespace IronRuby.Tests {
             );
 
             log.Errors.Clear();
+
+            // 1.9:
+            tokens = GetRubyTokens(log, "def !@\nend");
+
+            Assert(tokens.ToArray().ValueEquals(new[] {
+                Tokens.Def,
+                Tokens.Bang,
+                Tokens.NewLine,
+                Tokens.End,
+                Tokens.EndOfFile
+            }));
+
+            Assert(log.Errors.Count == 0);
+
+            // 1.9:
+            tokens = GetRubyTokens(log, "puts <<L, foo\n  .bar\nL\n  .baz");
+            Assert(tokens.ToArray().ValueEquals(new[] {
+		        Tokens.Identifier,
+		        Tokens.StringBegin,
+		        Tokens.StringContent,
+		        Tokens.StringEnd,
+		        Tokens.Comma,
+		        Tokens.Identifier,
+		        Tokens.Dot,
+		        Tokens.Identifier,
+		        Tokens.EndOfFile,
+            }));
+
+            Assert(log.Errors.Count == 0);
+
+            // EXPR_VALUE is included in IsBeginLexicalState (discriminates left bracket kind):
+            tokens = GetRubyTokens(log, "x = 1 ? [] : []");
+            Assert(tokens.ToArray().ValueEquals(new[] {
+		        Tokens.Identifier,
+		        Tokens.Assignment,
+		        Tokens.Integer,
+		        Tokens.QuestionMark,
+		        Tokens.LeftBracket,
+		        Tokens.RightBracket,
+		        Tokens.Colon,
+		        Tokens.LeftBracket,
+		        Tokens.RightBracket,
+		        Tokens.EndOfFile,
+            }));
+
+            Assert(log.Errors.Count == 0);
+
+            // Default block parameter is different from default method parameter.
+            // Block parameter doesn't allow using binary expressions etc. due to ambiguity with binary OR operator.
+            tokens = GetRubyTokens(log, "lambda {|x=1|}");
+            Assert(tokens.ToArray().ValueEquals(new[] {
+                Tokens.Identifier,
+                Tokens.LeftBlockBrace,
+                Tokens.Pipe,
+                Tokens.Identifier,
+                Tokens.Assignment,
+                Tokens.Integer,
+                Tokens.Pipe,
+                Tokens.RightBrace,
+                Tokens.EndOfFile,
+            }));
+
+            Assert(log.Errors.Count == 0);
+
+            tokens = GetRubyTokens(log, "lambda { ->(){} }");
+            Assert(tokens.ToArray().ValueEquals(new[] {
+                Tokens.Identifier,
+		        Tokens.LeftBlockBrace,
+		        Tokens.Lambda,
+		        Tokens.LeftParenthesis,
+		        Tokens.RightParenthesis,	
+		        Tokens.LeftLambdaBrace,
+		        Tokens.RightBrace,
+		        Tokens.RightBrace,
+		        Tokens.EndOfFile,
+            }));
+
+            Assert(log.Errors.Count == 0);
+
+            tokens = GetRubyTokens(log, "\"#{->{ }}\"\n-> do\nend");
+
+            Assert(tokens.ToArray().ValueEquals(new[] {
+                Tokens.StringBegin,
+		        Tokens.StringEmbeddedCodeBegin,
+		        Tokens.Lambda,
+		        Tokens.LeftLambdaBrace,	
+		        Tokens.RightBrace,
+		        Tokens.StringEmbeddedCodeEnd,
+                Tokens.StringEnd,
+                Tokens.NewLine,
+                Tokens.Lambda,
+                Tokens.LambdaDo,
+                Tokens.NewLine,
+                Tokens.End,
+		        Tokens.EndOfFile,
+            }));
+
+            Assert(log.Errors.Count == 0);
         }
         
-        private void TokenizerErrors1() {
+        private void ParserErrors1() {
             LoggingErrorSink log = new LoggingErrorSink();
 
             var tokens = GetRubyTokens(log, "def [");
@@ -214,6 +291,54 @@ namespace IronRuby.Tests {
                 log.Errors[0].Severity == Severity.FatalError
             );
 
+            log.Errors.Clear();
+
+            // Error: block argument should not be given (yield as a command):
+            tokens = GetRubyTokens(log, "a[yield 1, &x]");
+            Assert(tokens.ToArray().ValueEquals(new[] {
+		        Tokens.Identifier,
+		        Tokens.LeftIndexingBracket,
+		        Tokens.Yield,
+		        Tokens.Integer,
+		        Tokens.Comma,
+		        Tokens.BlockReference,
+		        Tokens.Identifier,
+		        Tokens.RightBracket,
+		        Tokens.EndOfFile,
+            }));
+
+            Assert(log.Errors.Count == 1 &&
+                log.Errors[0].Severity == Severity.Error
+            );
+
+            log.Errors.Clear();
+
+            // restrictions on jump statements:
+            foreach (var src in new[] {
+              "a[return 1, &x]",
+              "puts if return 1",
+              "1 && return 1",
+              "(a ? return 1 : 1) while true",
+              "a while return",
+              "1 + return",
+              "return / 1",
+              "a = return",
+              "return.foo = bar",
+              "a = 1 rescue return 2",
+            }) {
+                tokens = GetRubyTokens(log, src);
+                Assert(log.Errors.Count > 0 && log.Errors.Exists((e) => e.Severity == Severity.FatalError));
+                log.Errors.Clear();
+            }
+
+            // Error: Duplicate parameter name:
+            tokens = GetRubyTokens(log, "lambda { |x,x| }");
+            Assert(log.Errors.Count == 1 && log.Errors[0].Severity == Severity.Error);
+            log.Errors.Clear();
+
+            // Underscore may be duplicated:
+            tokens = GetRubyTokens(log, "lambda { |_,_| }");
+            Assert(log.Errors.Count == 0);
             log.Errors.Clear();
         }
 
@@ -483,6 +608,7 @@ namespace IronRuby.Tests {
             t.Load("def Σ;end", (tok) => tok.AllowNonAsciiIdentifiers = true)
                 [Tokens.Def][Tokens.Identifier][Tokens.Semicolon][Tokens.End].EOF();
 
+#if OBSOLETE // ???
             // we should report a warning if -KU is used and treat BOM as whitespace (MRI 1.8 treats the BOM as identifier):
             t.Load(new byte[] { 
                 0xEF, 0xBB, 0xBF, (byte)'x'
@@ -502,7 +628,7 @@ namespace IronRuby.Tests {
                 tok.Verbatim = true;
             }) 
             [Tokens.Whitespace][Tokens.Assignment][1].Expect(Errors.ByteOrderMarkIgnored);
-            
+#endif
             t.Expect();
         }
 
@@ -675,6 +801,11 @@ namespace IronRuby.Tests {
             t.Load("[\\\r\n]")[Tokens.LeftBracket][Tokens.RightBracket].EOF();
             t.Load("[\\\n]")[Tokens.LeftBracket][Tokens.RightBracket].EOF();
             t.Load("[\\\r]")[Tokens.LeftBracket][Tokens.Backslash][Tokens.RightBracket].EOF();
+
+            // 1.9 dot:
+            t.Load("foo\n\t .bar")[Tokens.Identifier][Tokens.Dot][Tokens.Identifier].EOF();
+            t.Load("foo\n\t ..bar")[Tokens.Identifier][Tokens.NewLine][Tokens.DoubleDot][Tokens.Identifier].EOF();
+            t.Load("foo\n\t \nbar")[Tokens.Identifier][Tokens.NewLine][Tokens.Identifier].EOF();
 
             // eoln used to quote a string:
             t.Load("x = %\r\nhello\r\n")[Tokens.Identifier][Tokens.Assignment][Tokens.StringBegin][Tokens.StringContent, "hello"][Tokens.StringEnd].EOF();
@@ -912,24 +1043,14 @@ namespace IronRuby.Tests {
             t.Expect();
         }
 
-        [Options(Compatibility = RubyCompatibility.Ruby19)]
         private void UnicodeEscapes1() {
             AssertTokenizer t = NewAssertTokenizer();
 
             int[] values = new[] { 0x20, 0x102020, 0x20, 0x20, 0 };
             int[] width = new[] { 2, 6, 6, 5, 1 };
 
-            for (int i = 0; i < values.Length; i++) {
-                t.Load(@"""\u{" + i.ToString("x" + width[i]) + @"}""")[Tokens.StringBegin][Char.ConvertFromUtf32(i)][Tokens.StringEnd].EOF();
-            }
-
-            t.Load(@":""\u{123456}""")[Tokens.SymbolBegin][Tokens.StringContent].Expect(Errors.TooLargeUnicodeCodePoint);
-            t.Load(@":""\u{0}""")[Tokens.SymbolBegin][Tokens.StringContent].Expect(Errors.NullCharacterInSymbol);
-            t.Load(@":""\u0000""")[Tokens.SymbolBegin][Tokens.StringContent].Expect(Errors.NullCharacterInSymbol);
             t.Load(@":""\u111""")[Tokens.SymbolBegin][Tokens.StringContent].Expect(Errors.InvalidEscapeCharacter);
             t.Load(@":""\u""")[Tokens.SymbolBegin][Tokens.StringContent].Expect(Errors.InvalidEscapeCharacter);
-            t.Load(@":""\u{123""")[Tokens.SymbolBegin][Tokens.StringContent].Expect(Errors.InvalidEscapeCharacter);
-            t.Load(@":""\u{123g}""")[Tokens.SymbolBegin][Tokens.StringContent].Expect(Errors.InvalidEscapeCharacter);
 
             // regex:
             t.Load(@"/\x20/")[Tokens.RegexpBegin][@"\x20"][Tokens.RegexpEnd].EOF();
@@ -937,7 +1058,20 @@ namespace IronRuby.Tests {
             t.Load(@"/\u{101234}/")[Tokens.RegexpBegin][@"\u{101234}"][Tokens.RegexpEnd].EOF();
 
             // braces:
-            t.Load(@"%{{\u{05d0}}}")[Tokens.StringBegin]["{\u05d0}"][Tokens.StringEnd].EOF();
+            t.Load(@":""\u{123456}""")[Tokens.SymbolBegin][Tokens.StringContent].Expect(Errors.TooLargeUnicodeCodePoint);
+            t.Load(@"%[{\u{05d0}}]")[Tokens.StringBegin]["{\u05d0}"][Tokens.StringEnd].EOF();
+            t.Load(@"%[\u{1 2 3 4}]")[Tokens.StringBegin]["\u0001\u0002\u0003\u0004"][Tokens.StringEnd].EOF();
+            t.Load(@"%[\u{}]")[Tokens.StringBegin][""][Tokens.StringEnd].Expect(Errors.InvalidUnicodeEscape);
+            t.Load(@"%[\u{1 }]")[Tokens.StringBegin]["\u0001"][Tokens.StringEnd].Expect(Errors.InvalidUnicodeEscape);
+            t.Load(@"%[\u{1  }]")[Tokens.StringBegin]["\u0001"][Tokens.StringEnd].Expect(Errors.InvalidUnicodeEscape);
+            t.Load(@"%[\u{FFFFFF FFFFFFFFFFFFFFFF 3 4}]")[Tokens.StringBegin]["??\u0003\u0004"][Tokens.StringEnd].Expect(Errors.TooLargeUnicodeCodePoint, Errors.TooLargeUnicodeCodePoint);
+            t.Load(@"%[\u{]")[Tokens.StringBegin][""][Tokens.StringEnd].Expect(Errors.UntermintedUnicodeEscape);
+            t.Load(@"%[\u{1]")[Tokens.StringBegin]["\u0001"][Tokens.StringEnd].Expect(Errors.UntermintedUnicodeEscape);
+            t.Load(@"%[\u{")[Tokens.StringBegin][""][Tokens.StringEnd].Expect(Errors.UntermintedUnicodeEscape, Errors.UnterminatedString);
+
+            for (int i = 0; i < values.Length; i++) {
+                t.Load(@"""\u{" + i.ToString("x" + width[i]) + @"}""")[Tokens.StringBegin][Char.ConvertFromUtf32(i)][Tokens.StringEnd].EOF();
+            }
 
             // eoln in the middle of \u escape:
             t.Load("\"\\u0020\n\"")[Tokens.StringBegin][" \n"][Tokens.StringEnd].EOF();
@@ -954,16 +1088,22 @@ namespace IronRuby.Tests {
             t.Expect();
         }
 
-        [Options(Compatibility = RubyCompatibility.Ruby186)]
-        private void UnicodeEscapes2() {
+        private void CharacterToken1() {
             AssertTokenizer t = NewAssertTokenizer();
-
-            t.Load(@":""\u{123456789}""")[Tokens.SymbolBegin][@"u{123456789}"][Tokens.StringEnd].EOF();
-            t.Load(@":""\u123456789""")[Tokens.SymbolBegin][@"u123456789"][Tokens.StringEnd].EOF();
-            t.Load(@"/\u1234/")[Tokens.RegexpBegin][@"\u1234"][Tokens.RegexpEnd].EOF();
-            t.Load(@"/\u{101234}/")[Tokens.RegexpBegin][@"\u{101234}"][Tokens.RegexpEnd].EOF();
-
-            t.Expect();
+            t.Load("?a")[Tokens.Character, "a"].EOF();
+            t.Load("?Σ")[Tokens.Character, "Σ"].EOF();
+            
+            // surrogate:
+            string u12345 = Char.ConvertFromUtf32(0x12345);
+            t.Load("?" + u12345)[Tokens.Character, u12345].EOF();
+            
+            // escapes:
+            t.Load(@"?\u{1}")[Tokens.Character, "\u0001"].EOF();
+            t.Load(@"?\u{}")[Tokens.Character, "\0"].Expect(Errors.InvalidUnicodeEscape);
+            t.Load(@"?\u{")[Tokens.Character, "\0"].Expect(Errors.UntermintedUnicodeEscape);
+            t.Load(@"?\u{1")[Tokens.Character, "\u0001"].Expect(Errors.UntermintedUnicodeEscape);
+            t.Load(@"?\u{1 2}")[Tokens.Character, "\u0001"].Expect(Errors.UntermintedUnicodeEscape);
+            t.Load(@"?\u{1123455}")[Tokens.Character, "?"].Expect(Errors.TooLargeUnicodeCodePoint);
         }
 
         private void LexicalState1() {
@@ -973,21 +1113,30 @@ namespace IronRuby.Tests {
             t.Load("a")[Tokens.Identifier, "a"].State(LexicalState.EXPR_CMDARG).EOF();
             t.Load("1;a")[1][Tokens.Semicolon][Tokens.Identifier, "a"].State(LexicalState.EXPR_CMDARG).EOF();
 
-            t.Load("a(b c)")
-                [Tokens.Identifier, "a"].State(LexicalState.EXPR_CMDARG)
-                [Tokens.LeftParenthesis].State(LexicalState.EXPR_BEG)       // switches to command mode for the next non-whitespace token
-                [Tokens.Identifier, "b"].State(LexicalState.EXPR_CMDARG)
-                [Tokens.Identifier, "c"].State(LexicalState.EXPR_ARG)       // command mode switched off
-                [Tokens.RightParenthesis].State(LexicalState.EXPR_END).EOF();
+            // 1.8 specific
+            //t.Load("a(b c)");
+            //t[Tokens.Identifier, "a"].State(LexicalState.EXPR_CMDARG);
+            //t[Tokens.LeftParenthesis].State(LexicalState.EXPR_BEG);       // switches to command mode for the next non-whitespace token
+            //t[Tokens.Identifier, "b"].State(LexicalState.EXPR_CMDARG);
+            //t[Tokens.Identifier, "c"].State(LexicalState.EXPR_ARG);       // command mode switched off
+            //t[Tokens.RightParenthesis].State(LexicalState.EXPR_END).EOF();
 
-            t.Load("a\nb")
-                [Tokens.Identifier, "a"].State(LexicalState.EXPR_CMDARG)
-                [Tokens.NewLine].State(LexicalState.EXPR_BEG)                 // switches to command mode for the next non-whitespace token
-                [Tokens.Identifier, "b"].State(LexicalState.EXPR_CMDARG).EOF();
+            t.Load("a\nb");
+            t[Tokens.Identifier, "a"].State(LexicalState.EXPR_CMDARG);
+            t[Tokens.NewLine].State(LexicalState.EXPR_BEG);                 // switches to command mode for the next non-whitespace token
+            t[Tokens.Identifier, "b"].State(LexicalState.EXPR_CMDARG).EOF();
+
+            t.Load("foo do a end");
+            t[Tokens.Identifier, "foo"].State(LexicalState.EXPR_CMDARG);
+            t[Tokens.Do].State(LexicalState.EXPR_BEG);                 // switches to command mode for the next non-whitespace token
+            t[Tokens.Identifier, "a"].State(LexicalState.EXPR_CMDARG);
+            t[Tokens.End].State(LexicalState.EXPR_END);
+            t.EOF();
         }
 
         private void Heredoc1() {
             AssertTokenizer t = new AssertTokenizer(this) { Verbatim = false };
+
             t.Load("<<LABEL\nhello\nLABEL")
                 [Tokens.StringBegin]["hello\n"][Tokens.StringEnd][Tokens.NewLine].EOF();
 
@@ -1029,13 +1178,12 @@ namespace IronRuby.Tests {
                 ["...\n"]
                 [Tokens.StringEnd].State(LexicalState.EXPR_END)
                 [Tokens.Comma].State(LexicalState.EXPR_BEG)
-                [Tokens.LeftExprParenthesis].State(LexicalState.EXPR_BEG)  // CommandMode == true
-                [Tokens.Identifier, "f"].State(LexicalState.EXPR_CMDARG)   // \\n is a whitespace, WhitespaceSeen == true
+                [Tokens.LeftExprParenthesis].State(LexicalState.EXPR_BEG)  
+                [Tokens.Identifier, "f"].State(LexicalState.EXPR_ARG)      // \\n is a whitespace, WhitespaceSeen == true
                 [Tokens.LeftArgParenthesis].State(LexicalState.EXPR_BEG)
                 [Tokens.RightParenthesis]
                 [Tokens.RightParenthesis].
             EOF();
-
             t.Expect();
 
             AssertTokenizer vt = new AssertTokenizer(this) { Verbatim = true };
@@ -1058,11 +1206,11 @@ namespace IronRuby.Tests {
                 [Tokens.Whitespace]
                 [Tokens.VerbatimHeredocBegin]
                 [Tokens.Comma].State(LexicalState.EXPR_BEG)
-                [Tokens.LeftExprParenthesis].State(LexicalState.EXPR_BEG)  // CommandMode == true
-                [Tokens.Identifier, "f"].State(LexicalState.EXPR_CMDARG)   
+                [Tokens.LeftExprParenthesis].State(LexicalState.EXPR_BEG)
+                [Tokens.Identifier, "f"].State(LexicalState.EXPR_ARG)   
                 [Tokens.Whitespace]
                 ["...\n"]
-                [Tokens.VerbatimHeredocEnd].State(LexicalState.EXPR_CMDARG)       
+                [Tokens.VerbatimHeredocEnd].State(LexicalState.EXPR_ARG)       
                 [Tokens.LeftArgParenthesis].State(LexicalState.EXPR_BEG)
                 [Tokens.RightParenthesis]
                 [Tokens.RightParenthesis].
@@ -1228,97 +1376,30 @@ B")
             Assert(tokens.ToArray().ValueEquals(expected));
         }
 
-        public void KCode1() {
-            var sjisEncoding = RubyEncoding.KCodeSJIS;
-
-            var sjisEngine = Ruby.CreateEngine((setup) => {
-                setup.Options["KCode"] = RubyEncoding.KCodeSJIS;
-            });
-            Assert(sjisEngine.Execute<object>("$KCODE").ToString() == "SJIS");
-            
-            var utf8Engine = Ruby.CreateEngine((setup) => {
-                setup.Options["KCode"] = RubyEncoding.KCodeUTF8;
-            });
-            Assert(utf8Engine.Execute<object>("$KCODE").ToString() == "UTF8");
-
-            // using default encoding (UTF8) for Unicode string source (ignoring KCODE):
-            var str = sjisEngine.Execute<MutableString>("Σ = 'Σ'");
-            Assert(str.Encoding == RubyEncoding.UTF8 && str.ToString() == "Σ");
-
-            // Use source code encoding no matter what characters are used in the string:
-            str = sjisEngine.Execute<MutableString>("'ascii'");
-            Assert(str.Encoding == RubyEncoding.UTF8 && str.ToString() == "ascii");
-
-            // Unicode source code (KCODE ignored):
-            var bytes = Encoding.UTF8.GetBytes("Σ = 'Σ'");
-            str = sjisEngine.CreateScriptSource(new BinaryContentProvider(bytes), null, Encoding.UTF8).Execute<MutableString>();
-            Assert(str.Encoding == RubyEncoding.UTF8 && str.ToString() == "Σ");
-
-            // SJIS source code (KCODE ignored):
-            bytes = sjisEncoding.Encoding.GetBytes(@"ﾎ = 'ﾎ'");
-            str = utf8Engine.CreateScriptSource(new BinaryContentProvider(bytes), null, sjisEncoding.Encoding).Execute<MutableString>();
-            Assert(str.Encoding == sjisEncoding && str.ToString() == "ﾎ");
-
-            // eval uses KCODE (binary source, KCODE == SJIS):
-            bytes = sjisEncoding.Encoding.GetBytes(@"eval(""ﾎ = 'ﾎ'"")");
-            str = sjisEngine.CreateScriptSource(new BinaryContentProvider(bytes), null, BinaryEncoding.Instance).Execute<MutableString>();
-            Assert(str.Encoding == sjisEncoding && str.ToString() == "ﾎ");
-
-            // eval uses KCODE (SJIS source, KCODE == SJIS):
-            bytes = sjisEncoding.Encoding.GetBytes(@"eval(""ﾎ = 'ﾎ'"")");
-            str = sjisEngine.CreateScriptSource(new BinaryContentProvider(bytes), null, sjisEncoding.Encoding).Execute<MutableString>();
-            Assert(str.Encoding == sjisEncoding && str.ToString() == "ﾎ");
-        }
-        
-        private void KCode2() {
-            if (_driver.PartialTrust) return;
-
-            var sjisEncoding = RubyEncoding.KCodeSJIS;
-
-            // change KCODE at runtime:
-            Context.SetGlobalVariable(null, "KCODE", MS("S"));
-            Assert(ReferenceEquals(Context.KCode, sjisEncoding));
-
-            // load file encoded in SJIS:
-            var tmpPath = Path.GetTempFileName();
-            try {
-                Runtime.Globals.SetVariable("TempFileName", MS(tmpPath));
-                File.WriteAllBytes(tmpPath, sjisEncoding.Encoding.GetBytes("class Cﾎ; $ﾎ = 'ﾎ'; end"));
-                Engine.Execute(@"load(TempFileName)");
-                Assert(Runtime.Globals.GetVariable("Cﾎ") is RubyClass);
-                var str = (MutableString)Context.GetGlobalVariable("ﾎ");
-                Assert(str.Encoding == sjisEncoding && str.ToString() == "ﾎ");
-            } finally {
-                File.Delete(tmpPath);
-            }
-        }
-
         // encodings suported in preamble:
         private static readonly string[] preambleEncodingNames = 
-            new[] { "ASCII-8BIT", "ASCII", "BINARY", "US-ASCII", "UTF-8", "EUC-JP", "SJIS", "SHIFT_JIS" };
+            new[] { "ASCII-8BIT", "ASCII", "BINARY", "US-ASCII", "UTF-8", "EUC-JP", "SJIS", "SHIFT_JIS", "LOCALE", "FILESYSTEM" };
 
-        [Options(Compatibility = RubyCompatibility.Ruby19)]
         private void Encoding1() {
             foreach (var name in preambleEncodingNames) {
-                var encoding = RubyEncoding.GetEncodingByRubyName(name);
+                var encoding = Context.GetEncodingByRubyName(name);
                 Assert(encoding != null);
 
                 // the encoding must be an identity on ASCII characters:
-                Assert(RubyEncoding.IsAsciiIdentity(encoding));
+                Assert(RubyEncoding.AsciiIdentity(encoding));
             }
 
             foreach (var info in Encoding.GetEncodings()) {
                 var encoding = info.GetEncoding();
                 
                 // doesn't blow up (the method checks itself):
-                RubyEncoding.IsAsciiIdentity(encoding);
+                RubyEncoding.AsciiIdentity(encoding);
 
                 //Console.WriteLine("case " + info.CodePage + ": // " + encoding.EncodingName);
             }
 
         }
 
-        [Options(Compatibility = RubyCompatibility.Ruby19)]
         private void Encoding2() {
             var source1 = Context.CreateSourceUnit(new BinaryContentProvider(BinaryEncoding.Instance.GetBytes(
 @"#! foo bar
@@ -1335,28 +1416,16 @@ p __ENCODING__
 
             // default hosted encoding is UTF8:
             var source2 = Context.CreateSnippet("p __ENCODING__", SourceCodeKind.Expression);
-            AssertOutput(() => source2.Execute(), @"#<Encoding:utf-8>");
+            AssertOutput(() => source2.Execute(), @"#<Encoding:UTF-8>");
         }
-
-        [Options(Compatibility = RubyCompatibility.Ruby186)]
-        private void Encoding3() {
-            AssertExceptionThrown<MissingMethodException>(() =>
-                CompilerTest("__ENCODING__")
-            );
-
-            // ignores preamble:
-            Context.CreateFileUnit("foo.rb", "# enCoding = UNDEFINED_ENCODING").Execute();
-        }
-
-        [Options(Compatibility = RubyCompatibility.Ruby19)]
+        
         private void Encoding4() {
             var enc = Engine.Execute<RubyEncoding>(@"eval('# encoding: SJIS
 __ENCODING__
 ')");
-            Assert(enc == RubyEncoding.KCodeSJIS.RealEncoding);
+            Assert(enc == RubyEncoding.SJIS);
         }
 
-        [Options(Compatibility = RubyCompatibility.Ruby19)]
         private void Encoding_Host1() {
             Encoding_HostHelper(Encoding.UTF8, "\u0394", true);
             Encoding_HostHelper(Encoding.UTF32, "\u0394", false);
@@ -1390,7 +1459,6 @@ __ENCODING__
         }
 
         // Ruby preamble overrides the encoding's preamble (BOM)
-        [Options(Compatibility = RubyCompatibility.Ruby19)]
         public void Encoding_Host2() {
             var src = "# encoding: ASCII-8BIT\r\n$X = '\u0394'";
             var binsrc = Encoding.UTF8.GetBytes(src);
@@ -1408,7 +1476,6 @@ __ENCODING__
             Assert(actualCode.Length == binsrc.Length);
         }
 
-        [Options(Compatibility = RubyCompatibility.Ruby19)]
         public void NamesEncoding1() {
             // TODO:
             XTestOutput(@"#encoding: SJIS

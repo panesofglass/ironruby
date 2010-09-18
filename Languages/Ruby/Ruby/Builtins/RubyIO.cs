@@ -72,10 +72,8 @@ namespace IronRuby.Builtins {
             _context = context;
             _fileDescriptor = -1;
             _stream = null;
-
-            // TODO (encoding): enable setting
-            _externalEncoding = RubyEncoding.Binary;
-            _internalEncoding = null;
+            _externalEncoding = context.DefaultExternalEncoding;
+            _internalEncoding = context.DefaultInternalEncoding;
         }
 
         public RubyIO(RubyContext/*!*/ context, Stream/*!*/ stream, IOMode mode) 
@@ -111,10 +109,12 @@ namespace IronRuby.Builtins {
 
         public RubyEncoding ExternalEncoding {
             get { return _externalEncoding; }
+            set { _externalEncoding = value; }
         }
 
         public RubyEncoding InternalEncoding {
             get { return _internalEncoding; }
+            set { _internalEncoding = value; }
         }
 
         public int GetFileDescriptor() {
@@ -439,10 +439,10 @@ namespace IronRuby.Builtins {
             }
         }
 
-        public MutableString ReadLineOrParagraph(MutableString separator) {
+        public MutableString ReadLineOrParagraph(MutableString separator, int limit) {
             var stream = GetReadableStream();
             try {
-                return stream.ReadLineOrParagraph(separator, _externalEncoding, PreserveEndOfLines);
+                return stream.ReadLineOrParagraph(separator, _externalEncoding, PreserveEndOfLines, limit >= 0 ? limit : Int32.MaxValue);
             } catch (ObjectDisposedException) {
                 throw RubyExceptions.CreateEBADF();
             }

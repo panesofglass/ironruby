@@ -94,13 +94,7 @@ namespace IronRuby.Runtime {
         public static bool HasSingletonClass(object obj) {
             return !(obj is int || obj is RubySymbol);
         }
-
-        public static void RequiresNotFrozen(RubyContext/*!*/ context, object/*!*/ obj) {
-            if (context.IsObjectFrozen(obj)) {
-                throw RubyExceptions.CreateObjectFrozenError();
-            }
-        }
-
+        
         public static MutableString/*!*/ InspectObject(UnaryOpStorage/*!*/ inspectStorage, ConversionStorage<MutableString>/*!*/ tosConversion, 
             object obj) {
 
@@ -657,6 +651,7 @@ namespace IronRuby.Runtime {
                 case ExpressionType.Negate: methodName = "-@"; return 1;
                 case ExpressionType.UnaryPlus: methodName = "+@"; return 1;
                 case ExpressionType.OnesComplement: methodName = "~"; return 1;
+                case ExpressionType.Not: methodName = "!"; return 1;
             }
 
             methodName = null;
@@ -686,6 +681,7 @@ namespace IronRuby.Runtime {
                 case "-@": op = ExpressionType.Negate; return 1;
                 case "+@": op = ExpressionType.UnaryPlus; return 1;
                 case "~": op = ExpressionType.OnesComplement; return 1;
+                case "!": op = ExpressionType.Not; return 1;
             }
 
             op = default(ExpressionType);
@@ -940,11 +936,9 @@ namespace IronRuby.Runtime {
             block.MethodLookupModule = module;
 
             if (args != null) {
-                result = RubyOps.Yield(args, self, block);
-            } else if (module.Context.RubyOptions.Compatibility < RubyCompatibility.Ruby19) {
-                result = RubyOps.Yield1(self, self, block);
+                result = RubyOps.Yield(args, null, self, block);
             } else {
-                result = RubyOps.Yield0(self, block);
+                result = RubyOps.Yield0(null, self, block);
             }
 
             return block.BlockJumped(result);
@@ -1438,6 +1432,21 @@ namespace IronRuby.Runtime {
         }
 
         #endregion
+
+        #endregion
+
+        #region Streams
+
+        /// <summary>
+        /// Writes binary content of <see cref="MutableString"/> into the given buffer.
+        /// </summary>
+        public static void Write(this Stream/*!*/ stream, MutableString/*!*/ str, int start, int count) {
+            int byteCount;
+            byte[] bytes = str.GetByteArray(out byteCount);
+            if (start < byteCount) {
+                stream.Write(bytes, start, Math.Min(byteCount - start, count));
+            }
+        }
 
         #endregion
     }

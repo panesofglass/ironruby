@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
-  <Import Project="$(SolutionDir)..\Solutions\Common.proj" />
+  <Import Project="$(ProjectDir)..\..\..\Solutions\Common.proj" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -112,6 +112,7 @@
     <Compile Include="array.cs" />
     <Compile Include="binascii.cs" />
     <Compile Include="cmath.cs" />
+    <Compile Include="msvcrt.cs" />
     <Compile Include="NativeSignal.cs" />
     <Compile Include="GlobalSuppressions.cs" />
     <Compile Include="mmap.cs" />
@@ -178,6 +179,7 @@
     <Compile Include="_random.cs" />
     <Compile Include="_sre.cs" />
     <Compile Include="_ssl.cs" />
+    <Compile Include="_subprocess.cs" />
     <Compile Include="_warnings.cs" />
     <Compile Include="_weakref.cs" />
     <Compile Include="..\AssemblyVersion.cs">
@@ -208,7 +210,7 @@
     </Reference>
     <Reference Include="System.Numerics, Version=2.0.5.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35" Condition="'$(TargetFrameworkVersion)' == 'v4.0' ">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>$(SilverlightPath)\System.Numerics.dll</HintPath>
+      <HintPath>$(SilverlightSdkPath)\System.Numerics.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>

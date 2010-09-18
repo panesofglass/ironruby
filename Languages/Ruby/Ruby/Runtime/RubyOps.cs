@@ -277,12 +277,23 @@ namespace IronRuby.Runtime {
         public static Proc InstantiateBlock(RubyScope/*!*/ scope, object self, BlockDispatcher/*!*/ dispatcher) {
             return (dispatcher.Method != null) ? new Proc(ProcKind.Block, self, scope, dispatcher) : null;
         }
+        [Emitted]
+        public static Proc InstantiateLambda(RubyScope/*!*/ scope, object self, BlockDispatcher/*!*/ dispatcher) {
+            return (dispatcher.Method != null) ? new Proc(ProcKind.Lambda, self, scope, dispatcher) : null;
+        }
 
         [Emitted]
         public static Proc/*!*/ DefineBlock(RubyScope/*!*/ scope, object self, BlockDispatcher/*!*/ dispatcher, object/*!*/ clrMethod) {
             // DLR closures should not be used:
             Debug.Assert(!(((Delegate)clrMethod).Target is Closure) || ((Closure)((Delegate)clrMethod).Target).Locals == null);
             return new Proc(ProcKind.Block, self, scope, dispatcher.SetMethod(clrMethod));
+        }
+
+        [Emitted]
+        public static Proc/*!*/ DefineLambda(RubyScope/*!*/ scope, object self, BlockDispatcher/*!*/ dispatcher, object/*!*/ clrMethod) {
+            // DLR closures should not be used:
+            Debug.Assert(!(((Delegate)clrMethod).Target is Closure) || ((Closure)((Delegate)clrMethod).Target).Locals == null);
+            return new Proc(ProcKind.Lambda, self, scope, dispatcher.SetMethod(clrMethod));
         }
 
         /// <summary>
@@ -307,11 +318,11 @@ namespace IronRuby.Runtime {
         #region Yield: TODO: generate
 
         [Emitted] 
-        public static object Yield0(object self, BlockParam/*!*/ blockParam) {
+        public static object Yield0(Proc procArg, object self, BlockParam/*!*/ blockParam) {
             object result;
             var proc = blockParam.Proc;
             try {
-                result = proc.Dispatcher.Invoke(blockParam, self);
+                result = proc.Dispatcher.Invoke(blockParam, self, procArg);
             } catch(EvalUnwinder evalUnwinder) {
                 result = blockParam.GetUnwinderResult(evalUnwinder);
             }
@@ -319,12 +330,12 @@ namespace IronRuby.Runtime {
             return result;
         }
 
-        [Emitted] 
-        public static object Yield1(object arg1, object self, BlockParam/*!*/ blockParam) {
+        [Emitted]
+        public static object Yield1(object arg1, Proc procArg, object self, BlockParam/*!*/ blockParam) {
             object result;
             var proc = blockParam.Proc;
             try {
-                result = proc.Dispatcher.Invoke(blockParam, self, arg1);
+                result = proc.Dispatcher.Invoke(blockParam, self, procArg, arg1);
             } catch (EvalUnwinder evalUnwinder) {
                 result = blockParam.GetUnwinderResult(evalUnwinder);
             }
@@ -333,11 +344,11 @@ namespace IronRuby.Runtime {
         }
 
         // YieldNoAutoSplat1 uses InvokeNoAutoSplat instead of Invoke (used by Call1)
-        internal static object YieldNoAutoSplat1(object arg1, object self, BlockParam/*!*/ blockParam) {
+        internal static object YieldNoAutoSplat1(object arg1, Proc procArg, object self, BlockParam/*!*/ blockParam) {
             object result;
             var proc = blockParam.Proc;
             try {
-                result = proc.Dispatcher.InvokeNoAutoSplat(blockParam, self, arg1);
+                result = proc.Dispatcher.InvokeNoAutoSplat(blockParam, self, procArg, arg1);
             } catch (EvalUnwinder evalUnwinder) {
                 result = blockParam.GetUnwinderResult(evalUnwinder);
             }
@@ -345,12 +356,12 @@ namespace IronRuby.Runtime {
             return result;
         }
 
-        [Emitted] 
-        public static object Yield2(object arg1, object arg2, object self, BlockParam/*!*/ blockParam) {
+        [Emitted]
+        public static object Yield2(object arg1, object arg2, Proc procArg, object self, BlockParam/*!*/ blockParam) {
             object result;
             var proc = blockParam.Proc;
             try {
-                result = proc.Dispatcher.Invoke(blockParam, self, arg1, arg2);
+                result = proc.Dispatcher.Invoke(blockParam, self, procArg, arg1, arg2);
             } catch (EvalUnwinder evalUnwinder) {
                 result = blockParam.GetUnwinderResult(evalUnwinder);
             }
@@ -358,12 +369,12 @@ namespace IronRuby.Runtime {
             return result;
         }
 
-        [Emitted] 
-        public static object Yield3(object arg1, object arg2, object arg3, object self, BlockParam/*!*/ blockParam) {
+        [Emitted]
+        public static object Yield3(object arg1, object arg2, object arg3, Proc procArg, object self, BlockParam/*!*/ blockParam) {
             object result;
             var proc = blockParam.Proc;
             try {
-                result = proc.Dispatcher.Invoke(blockParam, self, arg1, arg2, arg3);
+                result = proc.Dispatcher.Invoke(blockParam, self, procArg, arg1, arg2, arg3);
             } catch (EvalUnwinder evalUnwinder) {
                 result = blockParam.GetUnwinderResult(evalUnwinder);
             }
@@ -371,12 +382,12 @@ namespace IronRuby.Runtime {
             return result;
         }
 
-        [Emitted] 
-        public static object Yield4(object arg1, object arg2, object arg3, object arg4, object self, BlockParam/*!*/ blockParam) {
+        [Emitted]
+        public static object Yield4(object arg1, object arg2, object arg3, object arg4, Proc procArg, object self, BlockParam/*!*/ blockParam) {
             object result;
             var proc = blockParam.Proc;
             try {
-                result = proc.Dispatcher.Invoke(blockParam, self, arg1, arg2, arg3, arg4);
+                result = proc.Dispatcher.Invoke(blockParam, self, procArg, arg1, arg2, arg3, arg4);
             } catch (EvalUnwinder evalUnwinder) {
                 result = blockParam.GetUnwinderResult(evalUnwinder);
             }
@@ -384,14 +395,14 @@ namespace IronRuby.Runtime {
             return result;
         }
 
-        [Emitted] 
-        public static object YieldN(object[]/*!*/ args, object self, BlockParam/*!*/ blockParam) {
+        [Emitted]
+        public static object YieldN(object[]/*!*/ args, Proc procArg, object self, BlockParam/*!*/ blockParam) {
             Debug.Assert(args.Length > BlockDispatcher.MaxBlockArity);
 
             object result;
             var proc = blockParam.Proc;
             try {
-                result = proc.Dispatcher.Invoke(blockParam, self, args);
+                result = proc.Dispatcher.Invoke(blockParam, self, procArg, args);
             } catch (EvalUnwinder evalUnwinder) {
                 result = blockParam.GetUnwinderResult(evalUnwinder);
             }
@@ -399,36 +410,23 @@ namespace IronRuby.Runtime {
             return result;
         }
 
-        internal static object Yield(object[]/*!*/ args, object self, BlockParam/*!*/ blockParam) {
+        internal static object Yield(object[]/*!*/ args, Proc procArg, object self, BlockParam/*!*/ blockParam) {
             switch (args.Length) {
-                case 0: return RubyOps.Yield0(self, blockParam);
-                case 1: return RubyOps.Yield1(args[0], self, blockParam);
-                case 2: return RubyOps.Yield2(args[0], args[1], self, blockParam);
-                case 3: return RubyOps.Yield3(args[0], args[1], args[2], self, blockParam);
-                case 4: return RubyOps.Yield4(args[0], args[1], args[2], args[3], self, blockParam);
-                default: return RubyOps.YieldN(args, self, blockParam); 
+                case 0: return RubyOps.Yield0(procArg, self, blockParam);
+                case 1: return RubyOps.Yield1(args[0], procArg, self, blockParam);
+                case 2: return RubyOps.Yield2(args[0], args[1], procArg, self, blockParam);
+                case 3: return RubyOps.Yield3(args[0], args[1], args[2], procArg, self, blockParam);
+                case 4: return RubyOps.Yield4(args[0], args[1], args[2], args[3], procArg, self, blockParam);
+                default: return RubyOps.YieldN(args, procArg, self, blockParam); 
             }
         }
 
         [Emitted]
-        public static object YieldSplat0(IList/*!*/ splattee, object self, BlockParam/*!*/ blockParam) {
+        public static object YieldSplat0(IList/*!*/ splattee, Proc procArg, object self, BlockParam/*!*/ blockParam) {
             object result;
             var proc = blockParam.Proc;
             try {
-                result = proc.Dispatcher.InvokeSplat(blockParam, self, splattee);
-            } catch (EvalUnwinder evalUnwinder) {
-                result = blockParam.GetUnwinderResult(evalUnwinder);
-            }
-
-            return result;
-        }
-
-        [Emitted] 
-        public static object YieldSplat1(object arg1, IList/*!*/ splattee, object self, BlockParam/*!*/ blockParam) {
-            object result;
-            var proc = blockParam.Proc;
-            try {
-                result = proc.Dispatcher.InvokeSplat(blockParam, self, arg1, splattee);
+                result = proc.Dispatcher.InvokeSplat(blockParam, self, procArg, splattee);
             } catch (EvalUnwinder evalUnwinder) {
                 result = blockParam.GetUnwinderResult(evalUnwinder);
             }
@@ -437,11 +435,11 @@ namespace IronRuby.Runtime {
         }
 
         [Emitted]
-        public static object YieldSplat2(object arg1, object arg2, IList/*!*/ splattee, object self, BlockParam/*!*/ blockParam) {
+        public static object YieldSplat1(object arg1, IList/*!*/ splattee, Proc procArg, object self, BlockParam/*!*/ blockParam) {
             object result;
             var proc = blockParam.Proc;
             try {
-                result = proc.Dispatcher.InvokeSplat(blockParam, self, arg1, arg2, splattee);
+                result = proc.Dispatcher.InvokeSplat(blockParam, self, procArg, arg1, splattee);
             } catch (EvalUnwinder evalUnwinder) {
                 result = blockParam.GetUnwinderResult(evalUnwinder);
             }
@@ -450,11 +448,11 @@ namespace IronRuby.Runtime {
         }
 
         [Emitted]
-        public static object YieldSplat3(object arg1, object arg2, object arg3, IList/*!*/ splattee, object self, BlockParam/*!*/ blockParam) {
+        public static object YieldSplat2(object arg1, object arg2, IList/*!*/ splattee, Proc procArg, object self, BlockParam/*!*/ blockParam) {
             object result;
             var proc = blockParam.Proc;
             try {
-                result = proc.Dispatcher.InvokeSplat(blockParam, self, arg1, arg2, arg3, splattee);
+                result = proc.Dispatcher.InvokeSplat(blockParam, self, procArg, arg1, arg2, splattee);
             } catch (EvalUnwinder evalUnwinder) {
                 result = blockParam.GetUnwinderResult(evalUnwinder);
             }
@@ -463,11 +461,11 @@ namespace IronRuby.Runtime {
         }
 
         [Emitted]
-        public static object YieldSplat4(object arg1, object arg2, object arg3, object arg4, IList/*!*/ splattee, object self, BlockParam/*!*/ blockParam) {
+        public static object YieldSplat3(object arg1, object arg2, object arg3, IList/*!*/ splattee, Proc procArg, object self, BlockParam/*!*/ blockParam) {
             object result;
             var proc = blockParam.Proc;
             try {
-                result = proc.Dispatcher.InvokeSplat(blockParam, self, arg1, arg2, arg3, arg4, splattee);
+                result = proc.Dispatcher.InvokeSplat(blockParam, self, procArg, arg1, arg2, arg3, splattee);
             } catch (EvalUnwinder evalUnwinder) {
                 result = blockParam.GetUnwinderResult(evalUnwinder);
             }
@@ -476,11 +474,11 @@ namespace IronRuby.Runtime {
         }
 
         [Emitted]
-        public static object YieldSplatN(object[]/*!*/ args, IList/*!*/ splattee, object self, BlockParam/*!*/ blockParam) {
+        public static object YieldSplat4(object arg1, object arg2, object arg3, object arg4, IList/*!*/ splattee, Proc procArg, object self, BlockParam/*!*/ blockParam) {
             object result;
             var proc = blockParam.Proc;
             try {
-                result = proc.Dispatcher.InvokeSplat(blockParam, self, args, splattee);
+                result = proc.Dispatcher.InvokeSplat(blockParam, self, procArg, arg1, arg2, arg3, arg4, splattee);
             } catch (EvalUnwinder evalUnwinder) {
                 result = blockParam.GetUnwinderResult(evalUnwinder);
             }
@@ -489,17 +487,31 @@ namespace IronRuby.Runtime {
         }
 
         [Emitted]
-        public static object YieldSplatNRhs(object[]/*!*/ args, IList/*!*/ splattee, object rhs, object self, BlockParam/*!*/ blockParam) {
+        public static object YieldSplatN(object[]/*!*/ args, IList/*!*/ splattee, Proc procArg, object self, BlockParam/*!*/ blockParam) {
             object result;
             var proc = blockParam.Proc;
             try {
-                result = proc.Dispatcher.InvokeSplatRhs(blockParam, self, args, splattee, rhs);
+                result = proc.Dispatcher.InvokeSplat(blockParam, self, procArg, args, splattee);
             } catch (EvalUnwinder evalUnwinder) {
                 result = blockParam.GetUnwinderResult(evalUnwinder);
             }
 
             return result;
         }
+
+        [Emitted]
+        public static object YieldSplatNRhs(object[]/*!*/ args, IList/*!*/ splattee, object rhs, Proc procArg, object self, BlockParam/*!*/ blockParam) {
+            object result;
+            var proc = blockParam.Proc;
+            try {
+                result = proc.Dispatcher.InvokeSplatRhs(blockParam, self, procArg, args, splattee, rhs);
+            } catch (EvalUnwinder evalUnwinder) {
+                result = blockParam.GetUnwinderResult(evalUnwinder);
+            }
+
+            return result;
+        }
+
         #endregion
 
         #region Methods
@@ -1114,7 +1126,9 @@ namespace IronRuby.Runtime {
         [Emitted]
         public static RubyArray/*!*/ MakeArrayN(object[]/*!*/ items) {
             Debug.Assert(items != null);
-            return new RubyArray(items);
+            var array = new RubyArray(items.Length);
+            array.AddVector(items, 0, items.Length);
+            return array;
         }
 
         #endregion
@@ -1136,6 +1150,22 @@ namespace IronRuby.Runtime {
         #region Array
 
         [Emitted]
+        public static RubyArray/*!*/ AddRange(RubyArray/*!*/ array, IList/*!*/ list) {
+            return array.AddRange(list);
+        }
+
+        [Emitted] // method call:
+        public static RubyArray/*!*/ AddSubRange(RubyArray/*!*/ result, IList/*!*/ array, int start, int count) {
+            return result.AddRange(array, start, count);
+        }
+
+        [Emitted]
+        public static RubyArray/*!*/ AddItem(RubyArray/*!*/ array, object item) {
+            array.Add(item);
+            return array;
+        }
+
+        [Emitted]
         public static IList/*!*/ SplatAppend(IList/*!*/ array, IList/*!*/ list) {
             Utils.AddRange(array, list);
             return array;
@@ -1150,6 +1180,7 @@ namespace IronRuby.Runtime {
             return list;
         }
 
+        // 1.8 behavior
         [Emitted]
         public static object SplatPair(object value, IList/*!*/ list) {
             if (list.Count == 0) {
@@ -1174,7 +1205,7 @@ namespace IronRuby.Runtime {
 
         // CaseExpression
         [Emitted]
-        public static bool ExistsUnsplat(CallSite<Func<CallSite, object, object, object>>/*!*/ comparisonSite, object splattee, object value) {
+        public static bool ExistsUnsplatCompare(CallSite<Func<CallSite, object, object, object>>/*!*/ comparisonSite, object splattee, object value) {
             var list = splattee as IList;
             if (list != null) {
                 for (int i = 0; i < list.Count; i++) {
@@ -1188,6 +1219,22 @@ namespace IronRuby.Runtime {
             }
         }
 
+        // CaseExpression
+        [Emitted]
+        public static bool ExistsUnsplat(object splattee) {
+            var list = splattee as IList;
+            if (list != null) {
+                for (int i = 0; i < list.Count; i++) {
+                    if (IsTrue(list[i])) {
+                        return true;
+                    }
+                }
+                return false;
+            } else {
+                return IsTrue(splattee);
+            }
+        }
+
         [Emitted] // parallel assignment:
         public static object GetArrayItem(IList/*!*/ array, int index) {
             Debug.Assert(index >= 0);
@@ -1195,12 +1242,19 @@ namespace IronRuby.Runtime {
         }
 
         [Emitted] // parallel assignment:
-        public static RubyArray/*!*/ GetArraySuffix(IList/*!*/ array, int startIndex) {
-            int size = array.Count - startIndex;
+        public static object GetTrailingArrayItem(IList/*!*/ array, int index, int explicitCount) {
+            Debug.Assert(index >= 0);
+            int i = Math.Max(array.Count, explicitCount) - index;
+            return i >= 0 ? array[i] : null;
+        }
+
+        [Emitted] // parallel assignment:
+        public static RubyArray/*!*/ GetArrayRange(IList/*!*/ array, int startIndex, int explicitCount) {
+            int size = array.Count - explicitCount;
             if (size > 0) {
                 RubyArray result = new RubyArray(size);
-                for (int i = startIndex; i < array.Count; i++) {
-                    result.Add(array[i]);
+                for (int i = 0; i < size; i++) {
+                    result.Add(array[startIndex + i]);
                 }
                 return result;
             } else {
@@ -1449,6 +1503,12 @@ namespace IronRuby.Runtime {
         }
 
         [Emitted]
+        public static RubyRegex/*!*/ CreateRegexB(byte[]/*!*/ bytes, RubyEncoding/*!*/ encoding, RubyRegexOptions options, StrongBox<RubyRegex> regexpCache) {
+            Func<RubyRegex> createRegex = delegate { return new RubyRegex(CreateMutableStringB(bytes, encoding), options); };
+            return CreateRegexWorker(options, regexpCache, true, createRegex);
+        }
+
+        [Emitted]
         public static RubyRegex/*!*/ CreateRegexL(string/*!*/ str1, RubyEncoding/*!*/ encoding, RubyRegexOptions options, StrongBox<RubyRegex> regexpCache) {
             Func<RubyRegex> createRegex = delegate { return new RubyRegex(CreateMutableStringL(str1, encoding), options); };
             return CreateRegexWorker(options, regexpCache, true, createRegex);
@@ -1479,14 +1539,19 @@ namespace IronRuby.Runtime {
         }
 
         [Emitted]
-        public static RubyRegex/*!*/ CreateRegexN(object[]/*!*/ strings, RubyEncoding/*!*/ encoding, RubyRegexOptions options, StrongBox<RubyRegex> regexpCache) {
-            Func<RubyRegex> createRegex = delegate { return new RubyRegex(CreateMutableStringN(strings, encoding), options); };
+        public static RubyRegex/*!*/ CreateRegexN(MutableString[]/*!*/ strings, RubyRegexOptions options, StrongBox<RubyRegex> regexpCache) {
+            Func<RubyRegex> createRegex = delegate { return new RubyRegex(CreateMutableStringN(strings), options); };
             return CreateRegexWorker(options, regexpCache, false, createRegex);
         }
 
         #endregion
 
         #region CreateMutableString
+
+        [Emitted]
+        public static MutableString/*!*/ CreateMutableStringB(byte[]/*!*/ bytes, RubyEncoding/*!*/ encoding) {
+            return MutableString.CreateBinary(bytes, encoding);
+        }
 
         [Emitted]
         public static MutableString/*!*/ CreateMutableStringL(string/*!*/ str1, RubyEncoding/*!*/ encoding) {
@@ -1513,27 +1578,14 @@ namespace IronRuby.Runtime {
             return MutableString.CreateInternal(str1, encoding).Append(str2);
         }
 
+        // TODO: we should emit Append calls directly, and not create an array first
         [Emitted]
-        public static MutableString/*!*/ CreateMutableStringN(object/*!*/[]/*!*/ parts, RubyEncoding/*!*/ encoding) {
-            return ConcatStrings(parts, encoding);
-        }
-
-        private static MutableString/*!*/ ConcatStrings(object/*!*/[]/*!*/ parts, RubyEncoding/*!*/ encoding) {
-            var result = MutableString.CreateMutable(encoding);
+        public static MutableString/*!*/ CreateMutableStringN(MutableString/*!*/[]/*!*/ parts) {
+            Debug.Assert(parts.Length > 0);
+            var result = MutableString.CreateMutable(RubyEncoding.Ascii);
 
             for (int i = 0; i < parts.Length; i++) {
-                object part = parts[i];
-                byte[] bytes;
-                string str;
-
-                if ((str = part as string) != null) {
-                    result.Append(str);
-                } else if ((bytes = part as byte[]) != null) {
-                    result.Append(bytes);
-                } else {
-                    // TODO: check if encoding of str is compatible with encoding of the result:
-                    result.Append((MutableString)part);
-                }
+                result.Append(parts[i]);
             }
 
             return result;
@@ -1545,27 +1597,27 @@ namespace IronRuby.Runtime {
 
         [Emitted]
         public static RubySymbol/*!*/ CreateSymbolM(MutableString str1, RubyEncoding/*!*/ encoding, RubyScope/*!*/ scope) {
-            return scope.RubyContext.CreateSymbolInternal(CreateMutableStringM(str1, encoding));
+            return scope.RubyContext.CreateSymbol(CreateMutableStringM(str1, encoding), false);
         }
 
         [Emitted]
         public static RubySymbol/*!*/ CreateSymbolLM(string/*!*/ str1, MutableString str2, RubyEncoding/*!*/ encoding, RubyScope/*!*/ scope) {
-            return scope.RubyContext.CreateSymbolInternal(CreateMutableStringLM(str1, str2, encoding));
+            return scope.RubyContext.CreateSymbol(CreateMutableStringLM(str1, str2, encoding), false);
         }
 
         [Emitted]
         public static RubySymbol/*!*/ CreateSymbolML(MutableString str1, string/*!*/ str2, RubyEncoding/*!*/ encoding, RubyScope/*!*/ scope) {
-            return scope.RubyContext.CreateSymbolInternal(CreateMutableStringML(str1, str2, encoding));
+            return scope.RubyContext.CreateSymbol(CreateMutableStringML(str1, str2, encoding), false);
         }
         
         [Emitted]
         public static RubySymbol/*!*/ CreateSymbolMM(MutableString str1, MutableString str2, RubyEncoding/*!*/ encoding, RubyScope/*!*/ scope) {
-            return scope.RubyContext.CreateSymbolInternal(CreateMutableStringMM(str1, str2, encoding));
+            return scope.RubyContext.CreateSymbol(CreateMutableStringMM(str1, str2, encoding), false);
         }
 
         [Emitted]
-        public static RubySymbol/*!*/ CreateSymbolN(object[]/*!*/ strings, RubyEncoding/*!*/ encoding, RubyScope/*!*/ scope) {
-            return scope.RubyContext.CreateSymbolInternal(CreateMutableStringN(strings, encoding));
+        public static RubySymbol/*!*/ CreateSymbolN(MutableString[]/*!*/ strings, RubyScope/*!*/ scope) {
+            return scope.RubyContext.CreateSymbol(CreateMutableStringN(strings), false);
         }
 
         #endregion
@@ -1703,11 +1755,6 @@ namespace IronRuby.Runtime {
 
         [Emitted] //RescueClause:
         public static bool CompareException(BinaryOpStorage/*!*/ comparisonStorage, RubyScope/*!*/ scope, object classObject) {            
-            // throw the same exception when classObject is nil
-            if (!(classObject is RubyModule)) {
-                throw RubyExceptions.CreateTypeError("class or module required for rescue clause");
-            }
-
             var context = scope.RubyContext;
             var site = comparisonStorage.GetCallSite("===");
             bool result = IsTrue(site.Target(site, classObject, context.CurrentException));
@@ -2044,6 +2091,12 @@ namespace IronRuby.Runtime {
         public static string/*!*/ ConvertMutableStringToClrString(MutableString/*!*/ value) {
             return value.ConvertToString();
         }
+
+        [Emitted] // ProtocolConversionAction
+        public static MutableString/*!*/ ConvertSymbolToMutableString(RubySymbol/*!*/ value) {
+            // TODO: this is used for DefaultProtocol conversions; we might avoid clonning in some (many?) cases
+            return value.String.Clone();
+        }
         
         [Emitted] // ProtocolConversionAction
         public static RubyRegex/*!*/ ToRegexValidator(string/*!*/ className, object obj) {
@@ -2055,6 +2108,15 @@ namespace IronRuby.Runtime {
             var result = obj as IList;
             if (result == null) {
                 throw RubyExceptions.CreateReturnTypeError(className, "to_ary", "Array");
+            }
+            return result;
+        }
+
+        [Emitted] // ProtocolConversionAction
+        public static IList/*!*/ ToAValidator(string/*!*/ className, object obj) {
+            var result = obj as IList;
+            if (result == null) {
+                throw RubyExceptions.CreateReturnTypeError(className, "to_a", "Array");
             }
             return result;
         }
@@ -2346,17 +2408,17 @@ namespace IronRuby.Runtime {
 
         [Emitted]
         public static bool IsObjectFrozen(RubyInstanceData instanceData) {
-            return instanceData != null && instanceData.Frozen;
+            return instanceData != null && instanceData.IsFrozen;
         }
 
         [Emitted]
         public static bool IsObjectTainted(RubyInstanceData instanceData) {
-            return instanceData != null && instanceData.Tainted;
+            return instanceData != null && instanceData.IsTainted;
         }
 
         [Emitted]
         public static bool IsObjectUntrusted(RubyInstanceData instanceData) {
-            return instanceData != null && instanceData.Untrusted;
+            return instanceData != null && instanceData.IsUntrusted;
         }
 
         [Emitted]
@@ -2366,12 +2428,12 @@ namespace IronRuby.Runtime {
 
         [Emitted]
         public static void SetObjectTaint(ref RubyInstanceData instanceData, bool value) {
-            RubyOps.GetInstanceData(ref instanceData).Tainted = value;
+            RubyOps.GetInstanceData(ref instanceData).IsTainted = value;
         }
 
         [Emitted]
         public static void SetObjectTrustiness(ref RubyInstanceData instanceData, bool untrusted) {
-            RubyOps.GetInstanceData(ref instanceData).Untrusted = untrusted;
+            RubyOps.GetInstanceData(ref instanceData).IsUntrusted = untrusted;
         }
 
 #if !SILVERLIGHT // serialization

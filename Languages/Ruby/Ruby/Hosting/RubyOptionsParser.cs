@@ -35,6 +35,8 @@ namespace IronRuby.Hosting {
     public sealed class RubyOptionsParser : OptionsParser<RubyConsoleOptions> {
         private readonly List<string>/*!*/ _loadPaths = new List<string>();
         private readonly List<string>/*!*/ _requiredPaths = new List<string>();
+        private RubyEncoding _defaultEncoding;
+        private bool _disableRubyGems;
 
 #if DEBUG && !SILVERLIGHT
         private ConsoleTraceListener _debugListener;
@@ -127,7 +129,7 @@ namespace IronRuby.Hosting {
             }
 
             if (arg.StartsWith("-K", StringComparison.Ordinal)) {
-                LanguageSetup.Options["KCode"] = arg.Length >= 3 ? RubyEncoding.GetKCodingByNameInitial(arg[2]) : null;
+                _defaultEncoding = arg.Length >= 3 ? RubyEncoding.GetEncodingByNameInitial(arg[2]) : null;
                 return;
             }
 
@@ -246,19 +248,13 @@ namespace IronRuby.Hosting {
                     break;
 
                 case "-1.8.6":
-                    LanguageSetup.Options["Compatibility"] = RubyCompatibility.Ruby186;
-                    break;
-
                 case "-1.8.7":
-                    LanguageSetup.Options["Compatibility"] = RubyCompatibility.Ruby187;
-                    break;
-
                 case "-1.9":
-                    LanguageSetup.Options["Compatibility"] = RubyCompatibility.Ruby19;
-                    break;
-
                 case "-2.0":
-                    LanguageSetup.Options["Compatibility"] = RubyCompatibility.Ruby20;
+                    throw new InvalidOptionException(String.Format("Option `{0}' is no longer supported. The compatible Ruby version is 1.9.", optionName));
+
+                case "--disable-gems":
+                    _disableRubyGems = true;
                     break;
 
                 case "-X":
@@ -283,13 +279,6 @@ namespace IronRuby.Hosting {
                         } else {
                             SetupOptionsForCommand();
                         }
-                        
-                        LanguageSetup.Options["ArgumentEncoding"] = 
-#if SILVERLIGHT
-                            RubyEncoding.UTF8;
-#else
-                            RubyEncoding.GetRubyEncoding(Console.InputEncoding);
-#endif
                     } 
                     break;
             }
@@ -342,7 +331,20 @@ namespace IronRuby.Hosting {
             }
 #endif
             LanguageSetup.Options["SearchPaths"] = _loadPaths;
+
+            if (!_disableRubyGems) {
+                _requiredPaths.Insert(0, "gem_prelude.rb");
+            }
+
             LanguageSetup.Options["RequiredPaths"] = _requiredPaths;
+
+            LanguageSetup.Options["DefaultEncoding"] = _defaultEncoding;                        
+            LanguageSetup.Options["LocaleEncoding"] = _defaultEncoding ??
+#if SILVERLIGHT
+                RubyEncoding.UTF8;
+#else
+                RubyEncoding.GetRubyEncoding(Console.InputEncoding);
+#endif
 
 #if DEBUG && !SILVERLIGHT
             // Can be set to nl-BE, ja-JP, etc
@@ -393,11 +395,7 @@ namespace IronRuby.Hosting {
 
                 { "-trace",                      "enable support for set_trace_func" },
                 { "-profile",                    "enable support for 'pi = IronRuby::Clr.profile { block_to_profile }'" },
-                { "-1.8.6",                      "Ruby 1.8.6 mode (default)" },
-                { "-1.8.7",                      "Ruby 1.8.7 mode" },
-                { "-1.9",                        "Ruby 1.9 mode" },
-                { "-2.0",                        "Ruby 2.0 mode" },
-
+                
                 { "-X:ExceptionDetail",          "enable ExceptionDetail mode" },
                 { "-X:NoAdaptiveCompilation",    "disable adaptive compilation - all code will be compiled" },
                 { "-X:CompilationThreshold",     "the number of iterations before the interpreter starts compiling" },

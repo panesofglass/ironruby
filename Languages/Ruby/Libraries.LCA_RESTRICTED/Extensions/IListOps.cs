@@ -115,7 +115,7 @@ namespace IronRuby.Builtins {
             ICollection<object> collection;
             if ((array = list as RubyArray) != null) {
                 array.InsertRange(index, items, start, count);
-            } else if ((listOfObject = list as List<object>) != null && ((collection = items as ICollection<object>) != null)) {
+            } else if ((listOfObject = list as List<object>) != null && ((collection = items as ICollection<object>) != null) && start == 0 && count == collection.Count) {
                 listOfObject.InsertRange(index, collection);
             } else {
                 for (int i = 0; i < count; i++) {
@@ -146,15 +146,19 @@ namespace IronRuby.Builtins {
         }
 
         internal static void AddRange(IList/*!*/ collection, IList/*!*/ items) {
+            RubyArray array;
+
             int count = items.Count;
             if (count <= 1) {
                 if (count > 0) {
                     collection.Add(items[0]);
+                } else if ((array = collection as RubyArray) != null) {
+                    array.RequireNotFrozen();
                 }
                 return;
             }
 
-            RubyArray array = collection as RubyArray;
+            array = collection as RubyArray;
             if (array != null) {
                 array.AddRange(items);
             } else {
@@ -242,7 +246,7 @@ namespace IronRuby.Builtins {
                 AddRange(result, self);
             }
 
-            allocateStorage.Context.TaintObjectBy<IList>(result, self);
+            allocateStorage.Context.TaintObjectBy(result, self);
             return result;
         }
 
@@ -684,7 +688,7 @@ namespace IronRuby.Builtins {
                 }
             }
 
-            allocateStorage.Context.TaintObjectBy<IList>(result, self);
+            allocateStorage.Context.TaintObjectBy(result, self);
 
             return result;
         }
@@ -1135,6 +1139,13 @@ namespace IronRuby.Builtins {
             return result;
         }
 
+
+        [RubyMethod("flatten!")]
+        public static IList FlattenInPlace(ConversionStorage<IList>/*!*/ tryToAry, RubyArray/*!*/ self) {
+            self.RequireNotFrozen();
+            return FlattenInPlace(tryToAry, (IList)self);
+        }
+        
         [RubyMethod("flatten!")]
         public static IList FlattenInPlace(ConversionStorage<IList>/*!*/ tryToAry, IList/*!*/ self) {
             IList nested;
@@ -1179,28 +1190,76 @@ namespace IronRuby.Builtins {
 
         #endregion
 
-        #region include?, index, rindex
+        #region include?, find_index/index, rindex
 
         [RubyMethod("include?")]
         public static bool Include(BinaryOpStorage/*!*/ equals, IList/*!*/ self, object item) {
-            return Index(equals, self, item) != null;
+            return FindIndex(equals, null, self, item) != null;
         }
 
+        [RubyMethod("find_index")]
         [RubyMethod("index")]
-        public static object Index(BinaryOpStorage/*!*/ equals, IList/*!*/ self, object item) {
-            for (int i = 0; i < self.Count; ++i) {
-                if (Protocols.IsEqual(equals, self[i], item)) {
-                    return i;
+        public static Enumerator/*!*/ GetFindIndexEnumerator(BlockParam predicate, IList/*!*/ self) {
+            Debug.Assert(predicate == null);
+            throw new NotImplementedError("TODO: find_index enumerator");
+        }
+
+        [RubyMethod("find_index")]
+        [RubyMethod("index")]
+        public static object FindIndex([NotNull]BlockParam/*!*/ predicate, IList/*!*/ self) {
+            for (int i = 0; i < self.Count; i++) {
+                object blockResult;
+                if (predicate.Yield(self[i], out blockResult)) {
+                    return blockResult;
+                }
+                
+                if (Protocols.IsTrue(blockResult)) {
+                    return ScriptingRuntimeHelpers.Int32ToObject(i);
+                }
+            }
+            return null;
+        }
+
+        [RubyMethod("find_index")]
+        [RubyMethod("index")]
+        public static object FindIndex(BinaryOpStorage/*!*/ equals, BlockParam predicate, IList/*!*/ self, object value) {
+            if (predicate != null) {
+                equals.Context.ReportWarning("given block not used");
+            }
+
+            for (int i = 0; i < self.Count; i++) {
+                if (Protocols.IsEqual(equals, self[i], value)) {
+                    return ScriptingRuntimeHelpers.Int32ToObject(i);
+                }
+            }
+
+            return null;
+        }
+
+        [RubyMethod("rindex")]
+        public static object ReverseIndex([NotNull]BlockParam/*!*/ predicate, IList/*!*/ self) {
+            foreach (int i in IListOps.ReverseEnumerateIndexes(self)) {
+                object blockResult;
+                if (predicate.Yield(self[i], out blockResult)) {
+                    return blockResult;
+                }
+
+                if (Protocols.IsTrue(blockResult)) {
+                    return ScriptingRuntimeHelpers.Int32ToObject(i);
                 }
             }
             return null;
         }
 
         [RubyMethod("rindex")]
-        public static object ReverseIndex(BinaryOpStorage/*!*/ equals, IList/*!*/ self, object item) {
-            foreach (int index in IListOps.ReverseEnumerateIndexes(self)) {
-                if (Protocols.IsEqual(equals, self[index], item)) {
-                    return index;
+        public static object ReverseIndex(BinaryOpStorage/*!*/ equals, BlockParam predicate, IList/*!*/ self, object item) {
+            if (predicate != null) {
+                equals.Context.ReportWarning("given block not used");
+            } 
+            
+            foreach (int i in IListOps.ReverseEnumerateIndexes(self)) {
+                if (Protocols.IsEqual(equals, self[i], item)) {
+                    return ScriptingRuntimeHelpers.Int32ToObject(i);
                 }
             }
             return null;
@@ -1352,7 +1411,6 @@ namespace IronRuby.Builtins {
         }
 
         [RubyMethod("join")]
-        [RubyMethod("to_s")]
         public static MutableString/*!*/ Join(ConversionStorage<MutableString>/*!*/ tosConversion, IList/*!*/ self) {
             return Join(tosConversion, self, tosConversion.Context.ItemSeparator);
         }
@@ -1366,6 +1424,7 @@ namespace IronRuby.Builtins {
             return Join(tosConversion, self, separator != null ? Protocols.CastToString(tostrConversion, separator) : MutableString.FrozenEmpty);
         }
 
+        [RubyMethod("to_s")]
         [RubyMethod("inspect")]
         public static MutableString/*!*/ Inspect(RubyContext/*!*/ context, IList/*!*/ self) {
 
@@ -1395,11 +1454,13 @@ namespace IronRuby.Builtins {
 
         [RubyMethod("length")]
         [RubyMethod("size")]
+        [RubyMethod("count")]
         public static int Length(IList/*!*/ self) {
             return self.Count;
         }
 
         [RubyMethod("empty?")]
+        [RubyMethod("none?")]
         public static bool Empty(IList/*!*/ self) {
             return self.Count == 0;
         }
@@ -1422,6 +1483,10 @@ namespace IronRuby.Builtins {
         [RubyMethod("insert")]
         public static IList/*!*/ Insert(IList/*!*/ self, [DefaultProtocol]int index, params object[]/*!*/ args) {
             if (args.Length == 0) {
+                var array = self as RubyArray;
+                if (array != null) {
+                    array.RequireNotFrozen();
+                }
                 return self;
             }
 
@@ -1462,6 +1527,26 @@ namespace IronRuby.Builtins {
             return result;
         }
 
+        [RubyMethod("pop")]
+        public static object Pop(RubyContext/*!*/ context, IList/*!*/ self, [DefaultProtocol]int count) {
+            RequireNotFrozen(self);
+
+            if (count < 0) {
+                throw RubyExceptions.CreateArgumentError("negative array size");
+            }
+
+            if (count == 0 || self.Count == 0) {
+                return new RubyArray();
+            }
+
+            var normalizedCount = count <= self.Count ? count : self.Count;
+            var index = self.Count - normalizedCount;
+
+            var result = new RubyArray(self, index, normalizedCount);
+            IListOps.RemoveRange(self, index, normalizedCount);
+            return result;
+        }
+
         [RubyMethod("shift")]
         public static object Shift(IList/*!*/ self) {
             if (self.Count == 0) {
@@ -1481,9 +1566,7 @@ namespace IronRuby.Builtins {
 
         [RubyMethod("unshift")]
         public static IList/*!*/ Unshift(IList/*!*/ self, params object[]/*!*/ args) {
-            if (args.Length > 0) {
-                InsertRange(self, 0, args, 0, args.Length);
-            }
+            InsertRange(self, 0, args, 0, args.Length);
             return self;
         }
 
@@ -1648,6 +1731,12 @@ namespace IronRuby.Builtins {
         }
 
         [RubyMethod("uniq!")]
+        public static IList UniqueSelf(UnaryOpStorage/*!*/ hashStorage, BinaryOpStorage/*!*/ eqlStorage, RubyArray/*!*/ self) {
+            self.RequireNotFrozen();
+            return UniqueSelf(hashStorage, eqlStorage, (IList)self);
+        }
+
+        [RubyMethod("uniq!")]
         public static IList UniqueSelf(UnaryOpStorage/*!*/ hashStorage, BinaryOpStorage/*!*/ eqlStorage, IList/*!*/ self) {
             var seen = new Dictionary<object, bool>(new EqualityComparer(hashStorage, eqlStorage));
             bool nilSeen = false;
@@ -1672,13 +1761,198 @@ namespace IronRuby.Builtins {
 
         #endregion
 
-        #region zip 
+        #region zip
 
         [RubyMethod("zip")]
         public static object Zip(CallSiteStorage<EachSite>/*!*/ each, ConversionStorage<IList>/*!*/ tryToAry, BlockParam block,
             object self, [DefaultProtocol, NotNullItems]params IList/*!*/[]/*!*/ args) {
 
             return Enumerable.Zip(each, tryToAry, block, self, args);
+        }
+
+        #endregion
+
+        #region permutation, combination
+
+        internal sealed class PermutationEnumerator : IEnumerator {
+            private struct State {
+                public readonly int i, j;
+                public State(int i, int j) { this.i = i; this.j = j; }
+            }
+
+            private readonly IList/*!*/ _list;
+            private readonly int? _size;
+
+            public PermutationEnumerator(IList/*!*/ list, int? size) {
+                _size = size;
+                _list = list;
+            }
+
+            //
+            // rec = lambda do |i|
+            //   # State "j < -1"
+            //   if i == result.length
+            //     yield result.dup
+            //     return
+            //   end
+            //
+            //   j = i
+            //   while j < values.length
+            //     values[j], values[i] = values[i], values[j]
+            //     result[i] = values[i]      
+            //     rec.(i + 1)
+            //     # State "j >= 0"
+            //     j += 1
+            //   end
+            //
+            //   while j > i
+            //     j -= 1
+            //     values[j], values[i] = values[i], values[j] 
+            //   end
+            // end
+            //
+            // rec.(0)
+            //
+            public object Each(RubyScope/*!*/ scope, BlockParam/*!*/ block) {
+                int size = _size ?? _list.Count;
+                if (size < 0 || size > _list.Count) {
+                    return _list;
+                }
+
+                var result = new object[size];
+                var values = new object[_list.Count];
+                _list.CopyTo(values, 0);
+                var stack = new Stack<State>();
+                stack.Push(new State(0, -1));
+
+                while (stack.Count > 0) {
+                    var entry = stack.Pop();
+                    int i = entry.i;
+                    int j = entry.j;
+
+                    if (j < 0) {
+                        if (i == result.Length) {
+                            object blockResult;
+                            if (block.Yield(RubyOps.MakeArrayN(result), out blockResult)) {
+                                return blockResult;
+                            }
+                        } else {
+                            result[i] = values[i];
+                            stack.Push(new State(i, i));
+                            stack.Push(new State(i + 1, -1));
+                        }
+                    } else {
+                        j++;
+                        if (j == values.Length) {
+                            while (j > i) {
+                                j--;
+                                Xchg(values, i, j);
+                            }
+                        } else {
+                            Xchg(values, i, j);
+                            result[i] = values[i];
+                            stack.Push(new State(i, j));
+                            stack.Push(new State(i + 1, -1));
+                        }
+                    }
+                }
+                return _list;
+            }
+
+            private static void Xchg(object[]/*!*/ values, int i, int j) {
+                object item = values[j];
+                values[j] = values[i];
+                values[i] = item;
+            }
+        }
+        
+        internal sealed class CombinationEnumerator : IEnumerator {
+            private struct State {
+                public readonly int i, j;
+                public readonly bool init;
+                public State(int i, int j, bool init) { this.i = i; this.j = j; this.init = init; }
+            }
+
+            private readonly IList/*!*/ _list;
+            private readonly int? _size;
+
+            public CombinationEnumerator(IList/*!*/ list, int? size) {
+                _size = size;
+                _list = list;
+            }
+
+            //   
+            // rec = lambda do |i,j|
+            //   # State "init"
+            //   if j == result.length
+            //     yield result.dup
+            //     return
+            //   end
+            //   
+            //   while i <= values.length - result.length + j
+            //     result[j] = values[i]
+            //     rec.(i + 1, j + 1)
+            //     # State "!init"
+            //     i += 1      
+            //   end
+            // end
+            //   
+            // rec.(0, 0)
+            // 
+            public object Each(RubyScope/*!*/ scope, BlockParam/*!*/ block) {
+                int size = _size ?? _list.Count;
+                if (size < 0 || size > _list.Count) {
+                    return _list;
+                }
+                var result = new object[size];
+                var values = new object[_list.Count];
+                _list.CopyTo(values, 0);
+                var stack = new Stack<State>();
+                stack.Push(new State(0, 0, true));
+
+                while (stack.Count > 0) {
+                    var entry = stack.Pop();
+                    int i = entry.i;
+                    int j = entry.j;
+
+                    if (entry.init && j == result.Length) {
+                        object blockResult;
+                        if (block.Yield(RubyOps.MakeArrayN(result), out blockResult)) {
+                            return blockResult;
+                        }
+                    } else {
+                        if (!entry.init) {
+                            i++;
+                        }
+                        if (i <= values.Length - result.Length + j) {
+                            result[j] = values[i];
+                            stack.Push(new State(i, j, false));
+                            stack.Push(new State(i + 1, j + 1, true));
+                        }
+                    }
+                }
+                return _list;
+            }
+        }
+
+        [RubyMethod("permutation")]
+        public static object GetPermutations(BlockParam block, IList/*!*/ self, [DefaultProtocol, Optional]int? size) {
+            var enumerator = new PermutationEnumerator(self, size);
+            if (block == null) {
+                return new Enumerator(enumerator);
+            }
+
+            return enumerator.Each(null, block);
+        }
+        
+        [RubyMethod("combination")]
+        public static object GetCombinations(BlockParam block, IList/*!*/ self, [DefaultProtocol, Optional]int? size) {
+            var enumerator = new CombinationEnumerator(self, size);
+            if (block == null) {
+                return new Enumerator(enumerator);
+            }
+
+            return enumerator.Each(null, block);
         }
 
         #endregion

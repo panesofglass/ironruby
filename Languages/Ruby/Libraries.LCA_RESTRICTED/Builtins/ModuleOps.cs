@@ -405,6 +405,14 @@ namespace IronRuby.Builtins {
         }
 
         // thread-safe:
+        [RubyMethod("attr", RubyMethodAttributes.PrivateInstance)]
+        public static void Attr(RubyScope/*!*/ scope, RubyModule/*!*/ self, [DefaultProtocol, NotNullItems]params string/*!*/[]/*!*/ names) {
+            foreach (string name in names) {
+                DefineAccessor(scope, self, name, true, false);
+            }
+        }
+
+        // thread-safe:
         [RubyMethod("attr_accessor", RubyMethodAttributes.PrivateInstance)]
         public static void AttrAccessor(RubyScope/*!*/ scope, RubyModule/*!*/ self, [DefaultProtocol, NotNull]string/*!*/ name) {
             DefineAccessor(scope, self, name, true, true);
@@ -462,12 +470,12 @@ namespace IronRuby.Builtins {
         // thread-safe:
         [RubyMethod("remove_method", RubyMethodAttributes.PrivateInstance)]
         public static RubyModule/*!*/ RemoveMethod(RubyModule/*!*/ self, [DefaultProtocol, NotNullItems]params string[]/*!*/ methodNames) {
-            // MRI 1.8: reports a warning and allows removal
-            // MRI 1.9: throws a NameError
             foreach (var methodName in methodNames) {
-                if (self == self.Context.ObjectClass && methodName == Symbols.Initialize) {
-                    throw RubyExceptions.CreateNameError("Cannot remove Object#initialize");
+                // MRI: reports a warning and allows removal
+                if (self.IsBasicObjectClass && methodName == Symbols.Initialize) {
+                    throw RubyExceptions.CreateNameError("Cannot remove BasicObject#initialize");
                 }
+
                 if (!self.RemoveMethod(methodName)) {
                     throw RubyExceptions.CreateUndefinedMethodError(self, methodName);
                 }
@@ -667,18 +675,11 @@ namespace IronRuby.Builtins {
         // not thread-safe
         [RubyMethod("class_variables")]
         public static RubyArray/*!*/ ClassVariables(RubyModule/*!*/ self) {
-            var visited = new Dictionary<string, bool>();
             var result = new RubyArray();
-
-            using (self.Context.ClassHierarchyLocker()) {
-                self.ForEachClassVariable(true, delegate(RubyModule/*!*/ module, string name, object value) {
-                    if (name != null && !visited.ContainsKey(name)) {
-                        result.Add(self.Context.StringifyIdentifier(name));
-                        visited.Add(name, true);
-                    }
-                    return false;
-                });
-            }
+            self.EnumerateClassVariables((module, name, value) => {
+                result.Add(self.Context.StringifyIdentifier(name));
+                return false;
+            });
             return result;
         }
 
@@ -730,35 +731,46 @@ namespace IronRuby.Builtins {
 
         // thread-safe:
         [RubyMethod("constants", RubyMethodAttributes.PublicSingleton)]
-        public static RubyArray/*!*/ GetGlobalConstants(RubyModule/*!*/ self) {
-            return GetDefinedConstants(self.Context.ObjectClass);
+        public static RubyArray/*!*/ GetGlobalConstants(RubyModule/*!*/ self, [DefaultParameterValue(true)]bool inherited) {
+            return GetDefinedConstants(self.Context.ObjectClass, inherited);
         }
 
         // thread-safe:
         [RubyMethod("constants")]
-        public static RubyArray/*!*/ GetDefinedConstants(RubyModule/*!*/ self) {
-            var visited = new Dictionary<string, bool>();
+        public static RubyArray/*!*/ GetDefinedConstants(RubyModule/*!*/ self, [DefaultParameterValue(true)]bool inherited) {
             var result = new RubyArray();
+            if (inherited) {
+                var visited = new Dictionary<string, bool>();
 
-            bool hideGlobalConstants = !self.IsObjectClass;
+                bool hideGlobalConstants = !self.IsObjectClass;
 
-            using (self.Context.ClassHierarchyLocker()) {
-                self.ForEachConstant(true, delegate(RubyModule/*!*/ module, string name, object value) {
-                    if (name == null) {
-                        // terminate enumeration when Object is reached
-                        return hideGlobalConstants && module.IsObjectClass;
-                    }
+                using (self.Context.ClassHierarchyLocker()) {
+                    self.ForEachConstant(true, delegate(RubyModule/*!*/ module, string name, object value) {
+                        if (name == null) {
+                            // terminate enumeration when Object is reached
+                            return hideGlobalConstants && module.IsObjectClass;
+                        }
 
-                    if (!visited.ContainsKey(name)) {
+                        if (!visited.ContainsKey(name)) {
+                            if (Tokenizer.IsConstantName(name, true)) {
+                                result.Add(self.Context.StringifyIdentifier(name));
+                            }
+                            visited.Add(name, true);
+                        }
+                        return false;
+                    });
+                }
+
+            } else {
+                using (self.Context.ClassHierarchyLocker()) {
+                    self.EnumerateConstants((module, name, value) => {
                         if (Tokenizer.IsConstantName(name, true)) {
                             result.Add(self.Context.StringifyIdentifier(name));
                         }
-                        visited.Add(name, true);
-                    }
-                    return false;
-                });
+                        return false;
+                    });
+                }
             }
-
             return result;
         }
 

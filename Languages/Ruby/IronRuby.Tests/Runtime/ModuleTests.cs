@@ -18,6 +18,70 @@ using IronRuby.Runtime;
 
 namespace IronRuby.Tests {
     public partial class Tests {
+        public void BasicObject1() {
+            TestOutput(@"
+class Class
+  def f
+    puts 'Class'
+  end
+end
+
+class BasicObject
+  class << self
+    def f
+      puts 'BO'
+    end
+  end
+end
+
+Object.f
+", @"
+BO
+");            
+        }
+
+        /// <summary>
+        /// TODO: Unqualified constant lookup doesn't fallback to Object on BasicObject and its subclasses.
+        /// </summary>
+        public void BasicObject2() {
+            XTestOutput(@"
+module M
+  R = 1
+end
+
+class BasicObject
+  include ::M
+
+  p defined?(R)
+
+  X = 1
+  p defined?(Object)
+  class Z
+    p defined?(Object)
+  end
+  
+  module Q
+    p defined?(Object)
+  end
+end
+
+class BO < BasicObject
+  p defined?(Object)  
+end
+
+class C
+  p constants(true)
+end
+", @"
+""constant""
+nil
+""constant""
+""constant""
+nil
+[]
+");
+        }
+
         public void ClassDuplication1() {
             AssertOutput(delegate() {
                 CompilerTest(@"
@@ -64,16 +128,14 @@ foo
         }
 
         public void ClassDuplication3() {
-            AssertOutput(delegate() {
-                CompilerTest(@"
+            TestOutput(@"
 S = String.dup
 p S.ancestors
 puts S.instance_methods(false) - String.instance_methods(false) == []
 puts s = S.new('ghk')
 puts s.reverse
-");
-            }, @"
-[S, Enumerable, Comparable, Object, Kernel]
+", @"
+[S, Enumerable, Comparable, Object, Kernel, BasicObject]
 true
 ghk
 khg
@@ -81,18 +143,18 @@ khg
         }
 
         /// <summary>
-        /// This is different from MRI. In MRI ancestors of a duplicated Object class are [O, Kernel].
+        /// BasicObject
         /// </summary>
         public void ClassDuplication4() {
-            AssertOutput(delegate() {
-                CompilerTest(@"
+            TestOutput(@"
 O = Object.dup
 p O.ancestors
-p O.constants.include?('Object')
-");
-            }, @"
-[O, Kernel, Object, Kernel]
+p O.constants.include?(:Object)
+BasicObject.dup rescue p $!
+", @"
+[O, Kernel, BasicObject]
 true
+#<TypeError: can't copy the root class>
 ");
         }
 
@@ -100,7 +162,7 @@ true
             AssertOutput(delegate() {
                 CompilerTest(@"
 require 'mscorlib'
-p System::Collections.dup.constants.include?('IEnumerable')
+p System::Collections.dup.constants.include?(:IEnumerable)
 ");
             }, @"
 true
@@ -114,8 +176,8 @@ true
 ""default""
 1..2
 /foo/
-""""
-[""a"", ""b""]
+nil
+[:a, :b]
 ""foo""
 ";
 
@@ -292,16 +354,16 @@ Float.freeze
 puts defined? Float::EPSILON         # this should work, Float is a builtin
 puts defined? 1.2.+
 
-Enumerable.freeze
+Object.freeze
 begin
-  require 'enumerator'               # monkey-patches Enumerable
+  require 'yaml'               # monkey-patches Object
 rescue Exception
   p $!
 end
 ", @"
 constant
 method
-#<TypeError: can't modify frozen module>
+#<RuntimeError: can't modify frozen class>
 ");
         }
 

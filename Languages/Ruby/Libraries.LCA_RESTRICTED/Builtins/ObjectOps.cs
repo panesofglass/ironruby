@@ -17,12 +17,15 @@ using IronRuby.Runtime;
 
 namespace IronRuby.Builtins {
 
-    [RubyClass("Object", Extends = typeof(object), Restrictions = ModuleRestrictions.NoNameMapping | ModuleRestrictions.NotPublished)]
+    [RubyClass("Object", Extends = typeof(object), Inherits = typeof(BasicObject), Restrictions = ModuleRestrictions.NoNameMapping | ModuleRestrictions.NotPublished)]
     [Includes(typeof(Kernel))]
     public static class ObjectOps {
+        // RubyConstructor implemented by RubyObject ctors
+
         [RubyMethod("initialize", RubyMethodAttributes.PrivateInstance | RubyMethodAttributes.Empty)]
-        public static void Reinitialize(object self) {
-            // nop
+        public static object Reinitialize(object self, params object[]/*!*/ args) {
+            // ignores args
+            return self;
         }
 
         [RubyConstant]
@@ -33,5 +36,14 @@ namespace IronRuby.Builtins {
 
         [RubyConstant]
         public readonly static object NIL = null;
+
+        // TODO: this is a hack to load 1.8 impl of Rational and Complex
+        // We should implement them as builtins.
+        [RubyConstant("___Numerics__")]
+        public static object Numerics(RubyModule/*!*/ self) {
+            self.SetAutoloadedConstant("Rational", MutableString.CreateAscii("rational18.rb"));
+            self.SetAutoloadedConstant("Complex", MutableString.CreateAscii("complex18.rb"));
+            return null;
+        }
     }
 }

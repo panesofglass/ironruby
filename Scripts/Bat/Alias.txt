@@ -36,12 +36,14 @@ gencache  =%DLR_ROOT%\Languages\Ruby\Ruby\Compiler\GenerateReflectionCache.cmd $
 ;= Silverlight Build Commands
 ;=
 
-bsrbd    =msbuild %DLR_ROOT%\Solutions\Ruby.sln /p:Configuration="Silverlight3Debug" /p:SilverlightPath="C:\Program Files\Microsoft Silverlight\3.0.50106.0"
-bsrbr    =msbuild %DLR_ROOT%\Solutions\Ruby.sln /p:Configuration="Silverlight3Release" /p:SilverlightPath="C:\Program Files\Microsoft Silverlight\3.0.50106.0"
-bsd      =msbuild %DLR_ROOT%\Hosts\Silverlight\Silverlight.sln /p:Configuration="Silverlight3Debug" /p:SilverlightPath="C:\Program Files\Microsoft Silverlight\3.0.50106.0"
-bsr      =msbuild %DLR_ROOT%\Hosts\Silverlight\Silverlight.sln /p:Configuration="Silverlight3Release" /p:SilverlightPath="C:\Program Files\Microsoft Silverlight\3.0.50106.0"
-bsd4     =msbuild %DLR_ROOT%\Hosts\Silverlight\Silverlight4.sln /p:Configuration="Silverlight4Debug" /p:SilverlightPath="C:\Program Files\Microsoft Silverlight\4.0.41108.0 "
-bsr4     =msbuild %DLR_ROOT%\Hosts\Silverlight\Silverlight4.sln /p:Configuration="Silverlight4Release" /p:SilverlightPath="C:\Program Files\Microsoft Silverlight\4.0.41108.0 "
+bsrbd    =msbuild %DLR_ROOT%\Solutions\Ruby.sln /p:Configuration="Silverlight4Debug"
+bsrbr    =msbuild %DLR_ROOT%\Solutions\Ruby.sln /p:Configuration="Silverlight4Release"
+bsipd    =msbuild %DLR_ROOT%\Solutions\IronPython.sln /p:Configuration="Silverlight4Debug"
+bsipr    =msbuild %DLR_ROOT%\Solutions\IronPython.sln /p:Configuration="Silverlight4Release"
+bsrbd3   =msbuild %DLR_ROOT%\Solutions\Ruby.sln /p:Configuration="Silverlight3Debug"
+bsrbr3   =msbuild %DLR_ROOT%\Solutions\Ruby.sln /p:Configuration="Silverlight3Release"
+bsipd3   =msbuild %DLR_ROOT%\Solutions\IronPython.sln /p:Configuration="Silverlight3Debug"
+bsipr3   =msbuild %DLR_ROOT%\Solutions\IronPython.sln /p:Configuration="Silverlight3Release"
 
 ;==============================================================================
 ;= [Iron]Python program aliases
@@ -75,8 +77,8 @@ rbd2    ="%DLR_ROOT%\Bin\v2Debug\ir.exe" -D $*
 rbxm    =mono "%DLR_ROOT%\Bin\Debug\ir.exe" $*
 rbrm    =mono "%DLR_ROOT%\Bin\Release\ir.exe" $*
 rbdm    =mono "%DLR_ROOT%\Bin\Debug\ir.exe" -D $*
-irb19   ="%DLR_ROOT%\External.LCA_RESTRICTED\Languages\Ruby\ruby19\bin\irb.bat" $*
-ruby19  ="%DLR_ROOT%\External.LCA_RESTRICTED\Languages\Ruby\ruby19\bin\ruby.exe" $*
+irb18   ="%DLR_ROOT%\External.LCA_RESTRICTED\Languages\Ruby\ruby-1.8.6p368\bin\irb.bat" $*
+ruby18  ="%DLR_ROOT%\External.LCA_RESTRICTED\Languages\Ruby\ruby-1.8.6p368\bin\ruby.exe" $*
 msir    =%windir%\system32\WindowsPowerShell\v1.0\powershell.exe measure-command { %DLR_ROOT%\Bin\Release\ir.exe $* }
 
 ;==============================================================================

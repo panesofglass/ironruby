@@ -174,11 +174,7 @@ namespace IronRuby.Builtins {
             }
 
             public override Content/*!*/ SwitchToStringContent() {
-                if (_owner._encoding.IsKCoding) {
-                    return new KBinaryContent(_data, _owner);
-                } else {
-                    return SwitchToChars();
-                }
+                return SwitchToChars();
             }
 
             public override Content/*!*/ SwitchToMutableContent() {
@@ -196,6 +192,10 @@ namespace IronRuby.Builtins {
 
             public override void CheckEncoding() {
                 _owner._encoding.StrictEncoding.GetCharCount(_data, 0, _count);
+            }
+
+            public override bool ContainsInvalidCharacters() {
+                return Utils.ContainsInvalidCharacters(_data, 0, _count, _owner._encoding.StrictEncoding);
             }
 
             #endregion
@@ -254,7 +254,7 @@ namespace IronRuby.Builtins {
                     }
                 }
 
-                return SwitchToChars().DataGetChar(index);
+                return SwitchToChars().GetChar(index);
             }
 
             public override byte GetByte(int index) {
@@ -284,7 +284,7 @@ namespace IronRuby.Builtins {
                 char[] allValid;
                 var result = MutableString.EnumerateAsCharacters(_data, _count, _owner.Encoding, out allValid);
                 if (allValid != null) {
-                    // we can witch the content type if all characters are valid:
+                    // we can switch the content type if all characters are valid:
                     WrapContent(allValid, allValid.Length);
                 }
                 return result;

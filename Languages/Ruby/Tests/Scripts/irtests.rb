@@ -76,28 +76,26 @@ class IRTest
         :ProjGenerator    => lambda { generate_build_projects },
         :BuildSilverlight => silverlight_build_runner,
         :Smoke            => safe_ruby_runner(dlr_path('Languages/Ruby/Tests/Scripts/unit_tests.rb')),
-        :Legacy           => safe_ruby_runner(dlr_path('Languages/Ruby/Tests/run.rb')),
+        #:Legacy           => safe_ruby_runner(dlr_path('Languages/Ruby/Tests/run.rb')),
         :RubySpec_A       => spec_runner(":lang :cli :netinterop :cominterop :thread :netcli"),
         :RubySpec_B       => spec_runner(":core1 :lib1"),
         :RubySpec_C       => spec_runner(":core2 :lib2"),
-        :RubyGems         => utr_runner("gem"),
+        #:RubyGems         => utr_runner("gem"),
         :TZInfo           => utr_runner("tzinfo"),
         :Rake             => utr_runner("rake"),
         :Yaml             => ruby_runner(dlr_path('External.LCA_RESTRICTED/Languages/IronRuby/yaml/YamlTest/yaml_test_suite.rb')),
         
         # TODO: get rid of .bat file
-        :Tutorial         => shell_runner("#{dlr_path('Languages/Ruby/Samples/Tutorial/tutorial.bat')} #{dlr_path('Languages/Ruby/Samples/Tutorial/test/test_console.rb')}"),
+        #:Tutorial         => shell_runner("#{dlr_path('Languages/Ruby/Samples/Tutorial/tutorial.bat')} #{dlr_path('Languages/Ruby/Samples/Tutorial/test/test_console.rb')}"),
       }
     
       if not options[:minimum]
         @all_tasks.merge!({
           :ActionMailer   => utr_runner("action_mailer"),
-          :ActionPack     => utr_runner("action_pack"),
+          #:ActionPack     => utr_runner("action_pack"),
           :ActiveSupport  => utr_runner("active_support"),
           :ActiveRecord   => utr_runner("active_record"),
           :ActiveResource => utr_runner("active_resource"),
-          :ActionPack3    => utr_runner("action_pack_3", "-1.8.7"),
-          :ActiveSupport3 => utr_runner("active_support_3", "-1.8.7"),
         })
       end
     
@@ -111,9 +109,8 @@ class IRTest
     
       if not options[:minimum]
          @parallel_tasks += [
-           [:ActionPack, :ActionSupport, :ActionMailer],
-           [:ActionPack3, :ActionSupport3],
-           [:ActiveRecord, :ActiveResource],
+           [:ActionMailer, :ActiveSupport, :ActionPack, :ActiveResource],
+           [:ActiveRecord],
          ]
       end 
     end
@@ -176,22 +173,7 @@ class IRTest
   end
   
   def silverlight_build_runner
-    if git?
-      program_files = ENV['ProgramFiles(x86)'] ? ENV['ProgramFiles(x86)'] : ENV['ProgramFiles']
-      sl_path = Dir[File.expand_path("Microsoft Silverlight", program_files) + "/4.0.*"].first
-      sl_found = !!sl_path
-    else
-      sl_found = true
-    end
-    
-    lambda do 
-      if not sl_found
-        warn "\nSkipping Silverlight build since a Silverlight installation was not found at #{program_files} ...\n"
-        true
-      else
-        run_cmd build_cmd("Ruby", @sl_config, sl_path ? "/p:SilverlightPath=#{q sl_path}" : "")
-      end
-    end
+    lambda { run_cmd build_cmd("Ruby", @sl_config) }
   end
   
   def generate_build_projects
@@ -199,6 +181,17 @@ class IRTest
     if File.exists?(script)
       run_cmd "#{vm_shim} #{dlr_path('Util/IronPython/ipy.exe')} #{script}"
     end
+  end
+
+  def on_windows
+	case System::Environment.OSVersion.Platform
+	  when System::PlatformID.Win32S
+	  when System::PlatformID.Win32Windows
+	  when System::PlatformID.Win32NT
+		true
+	  else
+		false
+	end
   end
   
   def run

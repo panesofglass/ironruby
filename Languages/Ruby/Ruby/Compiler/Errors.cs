@@ -60,6 +60,10 @@ namespace IronRuby.Compiler {
         public static readonly ErrorInfo InvalidClassVariableName         = new ErrorInfo(Tokenizer + 15, "`@@{0}' is not allowed as a class variable name");
         public static readonly ErrorInfo InvalidCharacterInExpression     = new ErrorInfo(Tokenizer + 16, "Invalid character '{0}' in expression");
         public static readonly ErrorInfo InvalidMultibyteCharacter        = new ErrorInfo(Tokenizer + 17, "Invalid multibyte character: {0} ({1})");
+        public static readonly ErrorInfo ForLoopVariableIsConstantVariable = new ErrorInfo(Tokenizer + 18, "For loop variable cannot be a constant");
+        public static readonly ErrorInfo ForLoopVariableIsInstanceVariable = new ErrorInfo(Tokenizer + 19, "For loop variable cannot be an instance variable");
+        public static readonly ErrorInfo ForLoopVariableIsGlobalVariable   = new ErrorInfo(Tokenizer + 20, "For loop variable cannot be a global variable");
+        public static readonly ErrorInfo ForLoopVariableIsClassVariable    = new ErrorInfo(Tokenizer + 21, "For loop variable cannot be a class variable");
         
         public static readonly ErrorInfo MatchGroupReferenceOverflow = new ErrorInfo(Tokenizer + 30, "Match group reference ${0} doesn't fit into Fixnum");
         public static readonly ErrorInfo MatchGroupReferenceReadOnly = new ErrorInfo(Tokenizer + 31, "Can't set variable ${0}");
@@ -68,8 +72,7 @@ namespace IronRuby.Compiler {
 
         public static readonly ErrorInfo IncompleteCharacter = new ErrorInfo(Tokenizer + 37, "Incomplete character syntax");
         public static readonly ErrorInfo UnterminatedEmbeddedDocument = new ErrorInfo(Tokenizer + 38, "Embedded document meets end of file");
-        public static readonly ErrorInfo UnterminatedString = new ErrorInfo(Tokenizer + 39, "Unterminated quoted string meets end of file");
-        public static readonly ErrorInfo UnterminatedQuotedString = new ErrorInfo(Tokenizer + 40, "Unterminated quoted string meets end of file");
+        public static readonly ErrorInfo UnterminatedString = new ErrorInfo(Tokenizer + 39, "Unterminated string meets end of file");
         public static readonly ErrorInfo UnterminatedHereDocIdentifier = new ErrorInfo(Tokenizer + 41, "Unterminated here document identifier");
         public static readonly ErrorInfo UnterminatedHereDoc = new ErrorInfo(Tokenizer + 42, "can't find string \"{0}\" anywhere before end-of-file");
         public static readonly ErrorInfo FileInitializerInMethod = new ErrorInfo(Tokenizer + 43, "BEGIN in method");
@@ -78,13 +81,16 @@ namespace IronRuby.Compiler {
         public static readonly ErrorInfo UnknownRegexOption = new ErrorInfo(Tokenizer + 51, "Unknown RegEx option '{0}'");
         public static readonly ErrorInfo TooLargeUnicodeCodePoint = new ErrorInfo(Tokenizer + 52, "Invalid Unicode codepoint (too large)");
         public static readonly ErrorInfo InvalidEscapeCharacter = new ErrorInfo(Tokenizer + 53, "Invalid escape character syntax");
-        public static readonly ErrorInfo NullCharacterInSymbol = new ErrorInfo(Tokenizer + 54, "Symbol cannot contain '\\0'");
         public static readonly ErrorInfo EmptySymbolLiteral = new ErrorInfo(Tokenizer + 55, "empty symbol literal");
-        // TODO: public static readonly ErrorInfo EncodingsMixed = new ErrorInfo(Tokenizer + 56, "{0} mixed within {1} source");
+        public static readonly ErrorInfo EncodingsMixed = new ErrorInfo(Tokenizer + 56, "{0} mixed within {1} source");
+        public static readonly ErrorInfo UntermintedUnicodeEscape = new ErrorInfo(Tokenizer + 57, "Unterminated Unicode escape");
+        public static readonly ErrorInfo InvalidUnicodeEscape = new ErrorInfo(Tokenizer + 58, "Invalid Unicode escape");
 
         public static readonly ErrorInfo ModuleNameNotConstant = new ErrorInfo(Tokenizer + 66, "Class/module name must be a constant");
         public static readonly ErrorInfo ConstantReassigned = new ErrorInfo(Tokenizer + 67, "Constant re-assignment");
         public static readonly ErrorInfo BothBlockDefAndBlockRefGiven = new ErrorInfo(Tokenizer + 68, "both block arg and actual block given");
+        public static readonly ErrorInfo BlockGivenToYield = new ErrorInfo(Tokenizer + 69, "block given to yield");
+        
 
         // level 1 warnings:
         private const int WarningLevel1 = 0x2000;
@@ -102,11 +108,8 @@ namespace IronRuby.Compiler {
         public static readonly ErrorInfo AmpersandInterpretedAsProcArgument = new ErrorInfo(WarningLevel2 + 3, "`&' interpreted as argument prefix"); // TODO: level 1?
         public static readonly ErrorInfo AmpersandInVoidContext = new ErrorInfo(WarningLevel2 + 4, "Useless use of & in void context"); // TODO: level 1?
         public static readonly ErrorInfo StarInterpretedAsSplatArgument = new ErrorInfo(WarningLevel2 + 5, "`*' interpreted as argument prefix"); // TODO: level 1?
-        public static readonly ErrorInfo ByteOrderMarkIgnored = new ErrorInfo(WarningLevel2 + 6, "UTF-8 byte-order-mark ignored.");
-
-        // TODO: 
-        public static readonly ErrorInfo EncodingsMixed = new ErrorInfo(Tokenizer + 7, "{0} mixed within {1} source");
-
+        public static readonly ErrorInfo ShadowingOuterLocalVariable = new ErrorInfo(WarningLevel2 + 7, "shadowing outer local variable - {0}.");
+        
         internal static bool IsVerboseWarning(int errorCode) {
             return errorCode >= WarningLevel2;
         }

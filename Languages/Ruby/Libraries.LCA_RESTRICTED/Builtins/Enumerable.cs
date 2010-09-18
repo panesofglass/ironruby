@@ -16,6 +16,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -51,10 +52,12 @@ namespace IronRuby.Builtins {
             object result = ScriptingRuntimeHelpers.BooleanToObject(expected);
             Each(each, self, Proc.Create(each.Context, delegate(BlockParam/*!*/ selfBlock, object _, object item) {
                 if (predicate != null) {
-                    if (predicate.Yield(item, out item)) {
-                        result = item;
-                        return selfBlock.PropagateFlow(predicate, item);
+                    object blockResult;
+                    if (predicate.Yield(item, out blockResult)) {
+                        result = blockResult;
+                        return selfBlock.PropagateFlow(predicate, blockResult);
                     }
+                    item = blockResult;
                 }
 
                 bool isTrue = Protocols.IsTrue(item);
@@ -93,7 +96,7 @@ namespace IronRuby.Builtins {
 
         #endregion
 
-        #region detect, find
+        #region detect, find, find_index
 
         [RubyMethod("detect")]
         [RubyMethod("find")]
@@ -128,6 +131,57 @@ namespace IronRuby.Builtins {
                 var site = callStorage.GetCallSite("call", 0);
                 result = site.Target(site, ifNone);
             }
+            return result;
+        }
+
+        [RubyMethod("find_index")]
+        public static Enumerator/*!*/ GetFindIndexEnumerator(CallSiteStorage<EachSite>/*!*/ each, BlockParam predicate, object self) {
+            Debug.Assert(predicate == null);
+            throw new NotImplementedError("TODO: find_index enumerator");
+        }
+
+        [RubyMethod("find_index")]
+        public static object FindIndex(CallSiteStorage<EachSite>/*!*/ each, [NotNull]BlockParam/*!*/ predicate, object self) {
+            int index = 0;
+
+            object result = null;
+            Each(each, self, Proc.Create(each.Context, delegate(BlockParam/*!*/ selfBlock, object _, object item) {
+                object blockResult;
+                if (predicate.Yield(item, out blockResult)) {
+                    result = blockResult;
+                    return selfBlock.PropagateFlow(predicate, blockResult);
+                }
+
+                if (Protocols.IsTrue(blockResult)) {
+                    result = ScriptingRuntimeHelpers.Int32ToObject(index);
+                    return selfBlock.Break(null);
+                }
+
+                index++;
+                return null;
+            }));
+
+            return result;
+        }
+
+        [RubyMethod("find_index")]
+        public static object FindIndex(CallSiteStorage<EachSite>/*!*/ each, BinaryOpStorage/*!*/ equals, BlockParam predicate, object self, object value) {
+            if (predicate != null) {
+                each.Context.ReportWarning("given block not used");
+            }
+
+            int index = 0;
+            object result = null;
+            Each(each, self, Proc.Create(each.Context, delegate(BlockParam/*!*/ selfBlock, object _, object item) {
+                if (Protocols.IsEqual(equals, item, value)) {
+                    result = ScriptingRuntimeHelpers.Int32ToObject(index);
+                    return selfBlock.Break(null);
+                }
+
+                index++;
+                return null;
+            }));
+
             return result;
         }
 
@@ -265,15 +319,33 @@ namespace IronRuby.Builtins {
 
         #endregion
 
-        #region inject
+        #region inject/reduce
 
+        // def inject(result = Undefined)
+        //   each do |*args|
+        //     arg = args.size <= 1 ? args[0] : args
+        //     if result == Undefined
+        //       result = arg
+        //     else
+        //       result = yield(result, arg)
+        //     end
+        //   end
+        //   result
+        // end
+        [RubyMethod("reduce")]
         [RubyMethod("inject")]
         public static object Inject(CallSiteStorage<EachSite>/*!*/ each, BlockParam operation, object self, [Optional]object initial) {
 
             object result = initial;
-            Each(each, self, Proc.Create(each.Context, delegate(BlockParam/*!*/ selfBlock, object _, object item) {
+            Each(each, self, Proc.Create(each.Context, 0, delegate(BlockParam/*!*/ selfBlock, object _, object[] __, RubyArray/*!*/ args) {
+                Debug.Assert(__.Length == 0);
+
+                // TODO: this is weird but is actually exploited in Rack::Utils::HeaderHash
+                // TODO: Can we optimize (special dispatcher)? We allocate splatte array for each iteration.
+                object value = args.Count == 0 ? null : args.Count == 1 ? args[0] : args;
+
                 if (result == Missing.Value) {
-                    result = item;
+                    result = value;
                     return null;
                 }
 
@@ -281,7 +353,7 @@ namespace IronRuby.Builtins {
                     throw RubyExceptions.NoBlockGiven();
                 }
 
-                if (operation.Yield(result, item, out result)) {
+                if (operation.Yield(result, value, out result)) {
                     return selfBlock.PropagateFlow(operation, result);
                 }
 
@@ -519,6 +591,95 @@ namespace IronRuby.Builtins {
         #endregion
 
         #region TODO: cycle, drop, drop_while, find_index, group_by, max_by, min_by, minmax, minmax_by, reduce, take_take_while (1.9)
+
+        #endregion
+
+        #region each_cons, each_slice
+
+        [RubyMethod("each_cons")]
+        public static object EachCons(CallSiteStorage<EachSite>/*!*/ each, BlockParam/*!*/ block, object self, [DefaultProtocol]int sliceSize) {
+            return EachSlice(each, block, self, sliceSize, false, (slice) => {
+                RubyArray newSlice = new RubyArray(slice.Count);
+                for (int i = 1; i < slice.Count; i++) {
+                    newSlice.Add(slice[i]);
+                }
+                return newSlice;
+            });
+        }
+
+        [RubyMethod("each_slice")]
+        public static object EachSlice(CallSiteStorage<EachSite>/*!*/ each, BlockParam/*!*/ block, object self, [DefaultProtocol]int sliceSize) {
+            return EachSlice(each, block, self, sliceSize, true, (slice) => null);
+        }
+
+        private static object EachSlice(CallSiteStorage<EachSite>/*!*/ each, BlockParam/*!*/ block, object self, int sliceSize,
+            bool includeIncomplete, Func<RubyArray/*!*/, RubyArray>/*!*/ newSliceFactory) {
+
+            if (sliceSize <= 0) {
+                throw RubyExceptions.CreateArgumentError("invalid slice size");
+            }
+
+            RubyArray slice = null;
+
+            object result = null;
+
+            Each(each, self, Proc.Create(each.Context, delegate(BlockParam/*!*/ selfBlock, object _, object item) {
+                if (slice == null) {
+                    slice = new RubyArray(sliceSize);
+                }
+
+                slice.Add(item);
+
+                if (slice.Count == sliceSize) {
+                    if (block == null) {
+                        throw RubyExceptions.NoBlockGiven();
+                    }
+
+                    var completeSlice = slice;
+                    slice = newSliceFactory(slice);
+
+                    object blockResult;
+                    if (block.Yield(completeSlice, out blockResult)) {
+                        result = blockResult;
+                        return selfBlock.PropagateFlow(block, blockResult);
+                    }
+                }
+
+                return null;
+            }));
+
+            if (slice != null && includeIncomplete) {
+                if (block == null) {
+                    throw RubyExceptions.NoBlockGiven();
+                }
+
+                object blockResult;
+                if (block.Yield(slice, out blockResult)) {
+                    return blockResult;
+                }
+            }
+
+            return result;
+        }
+
+        #endregion
+
+        #region enum_cons, enum_slice, enum_with_index
+
+        [RubyMethod("enum_cons")]
+        public static Enumerator/*!*/ GetConsEnumerator(object self, [DefaultProtocol]int sliceSize) {
+            return new Enumerator(self, "each_cons", sliceSize);
+        }
+
+        [RubyMethod("enum_slice")]
+        public static Enumerator/*!*/ GetSliceEnumerator(object self, [DefaultProtocol]int sliceSize) {
+            return new Enumerator(self, "each_slice", sliceSize);
+        }
+
+        [RubyMethod("enum_with_index")]
+        public static Enumerator/*!*/ GetEnumeratorWithIndex(object self) {
+            return new Enumerator(self, "each_with_index", null);
+        }
 
         #endregion
     }

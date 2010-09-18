@@ -139,10 +139,14 @@ namespace IronRuby.Builtins {
 
         #region Flags
 
-        private void Mutate() {
+        public void RequireNotFrozen() {
             if ((_flags & IsFrozenFlag) != 0) {
                 throw RubyExceptions.CreateObjectFrozenError();
             }
+        }
+
+        private void Mutate() {
+            RequireNotFrozen();
         }
 
         public bool IsTainted {
@@ -343,7 +347,7 @@ namespace IronRuby.Builtins {
             }
         }
 
-        private void AddVector(object[]/*!*/ items, int start, int count) {
+        internal void AddVector(object[]/*!*/ items, int start, int count) {
             int s = ResizeForAppend(count, false);
             Array.Copy(items, start, _content, s, count);
         }

@@ -14,6 +14,11 @@
  * ***************************************************************************/
 
 #if !SILVERLIGHT // ICustomTypeDescriptor
+#if !CLR2
+using System.Linq.Expressions;
+#else
+using Microsoft.Scripting.Ast;
+#endif
 
 using System;
 using System.Collections.Generic;
@@ -129,12 +134,14 @@ namespace IronRuby.Runtime {
             var properties = new Dictionary<string, int>();
             using (context.ClassHierarchyLocker()) {
                 immediateClass.ForEachMember(true, RubyMethodAttributes.DefaultVisibility, delegate(string/*!*/ name, RubyModule/*!*/ module, RubyMemberInfo/*!*/ member) {
+                    ExpressionType operatorType;
+                    
                     int flag = 0;
                     if (member is RubyAttributeReaderInfo) {
                         flag = readable;
                     } else if (member is RubyAttributeWriterInfo) {
                         flag = writable;
-                    } else if (name == "initialize") {
+                    } else if (name == "initialize" || RubyUtils.TryMapOperator(name, out operatorType) != 0) {
                         // Special case; never a property
                     } else {
                         int arity = member.GetArity();
@@ -240,7 +247,8 @@ namespace IronRuby.Runtime {
                 );
 
                 try {
-                    _propertyType = GetValue(testObject).GetType();
+                    var value = GetValue(testObject);
+                    _propertyType = (value != null) ? value.GetType() : typeof(object);
                 } catch (Exception) {
                     _propertyType = typeof(object);
                 }

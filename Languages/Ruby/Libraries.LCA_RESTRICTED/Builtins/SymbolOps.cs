@@ -30,12 +30,12 @@ namespace IronRuby.Builtins {
     [HideMethod("==")]
     public static class SymbolOps {
 
-        #region Public Instance Methods
+        #region to_s, inspect, to_sym, to_clr_string, to_proc
 
         [RubyMethod("id2name")]
         [RubyMethod("to_s")]
         public static MutableString/*!*/ ToString(RubySymbol/*!*/ self) {
-            return self.ToMutableString();
+            return self.String.Clone();
         }
 
         [RubyMethod("inspect")]
@@ -43,7 +43,7 @@ namespace IronRuby.Builtins {
             var str = self.ToString();
             bool allowMultiByteCharacters = context.RubyOptions.Compatibility >= RubyCompatibility.Ruby19 || context.KCode != null;
 
-            var result = self.ToMutableString();
+            var result = self.String.Clone();
 
             // simple cases:
             if (
@@ -62,6 +62,7 @@ namespace IronRuby.Builtins {
                         // Ruby doesn't allow empty symbols, we can get one from outside though:
                         return MutableString.CreateAscii(":\"\"");
 
+                    case "!":
                     case "|":
                     case "^":
                     case "&":
@@ -69,6 +70,8 @@ namespace IronRuby.Builtins {
                     case "==":
                     case "===":
                     case "=~":
+                    case "!=":
+                    case "!~":
                     case ">":
                     case ">=":
                     case "<":
@@ -124,12 +127,6 @@ namespace IronRuby.Builtins {
             return result;
         }
 
-        [RubyMethod("to_i")]
-        [RubyMethod("to_int")]
-        public static int ToInteger(RubySymbol/*!*/ self) {
-            return self.Id;
-        }
-
         [RubyMethod("to_sym")]
         [RubyMethod("intern", Compatibility = RubyCompatibility.Ruby19)]
         public static RubySymbol/*!*/ ToSymbol(RubySymbol/*!*/ self) {
@@ -148,18 +145,58 @@ namespace IronRuby.Builtins {
 
         #endregion
 
-        #region 1.9 Methods
+        #region <=>, ==, ===, casecmp
 
-        // => 
-        // <=>
-        // ==
-        // casecmp
-        
+        [RubyMethod("<=>")]
+        public static int Compare(RubySymbol/*!*/ self, [NotNull]RubySymbol/*!*/ other) {
+            return Math.Sign(self.CompareTo(other));
+        }
+
+        [RubyMethod("<=>")]
+        public static int Compare(RubyContext/*!*/ context, RubySymbol/*!*/ self, [NotNull]ClrName/*!*/ other) {
+            return -ClrNameOps.Compare(context, other, self);
+        }
+
+        [RubyMethod("<=>")]
+        public static object Compare(RubySymbol/*!*/ self, object other) {
+            return null;
+        }
+
+        [RubyMethod("==")]
+        [RubyMethod("===")]
+        public static bool Equals(RubySymbol/*!*/ lhs, [NotNull]RubySymbol/*!*/ rhs) {
+            return lhs.Equals(rhs);
+        }
+
+        [RubyMethod("==")]
+        [RubyMethod("===")]
+        public static bool Equals(RubyContext/*!*/ context, RubySymbol/*!*/ lhs, [NotNull]ClrName/*!*/ rhs) {
+            return ClrNameOps.IsEqual(context, rhs, lhs);
+        }
+
+        [RubyMethod("==")]
+        [RubyMethod("===")]
+        public static bool Equals(RubySymbol/*!*/ self, object other) {
+            return false;
+        }
+
+        [RubyMethod("casecmp")]
+        public static int Casecmp(RubySymbol/*!*/ self, [NotNull]RubySymbol/*!*/ other) {
+            return MutableStringOps.Casecmp(self.String, other.String);
+        }
+
+        [RubyMethod("casecmp")]
+        public static int Casecmp(RubySymbol/*!*/ self, [DefaultProtocol, NotNull]MutableString/*!*/ other) {
+            return MutableStringOps.Casecmp(self.String, other);
+        }
+
+        #endregion
+
         #region =~, match
 
         [RubyMethod("=~", Compatibility = RubyCompatibility.Ruby19)]
         public static object Match(RubyScope/*!*/ scope, RubySymbol/*!*/ self, [NotNull]RubyRegex/*!*/ regex) {
-            return MutableStringOps.Match(scope, self.ToMutableString(), regex);
+            return MutableStringOps.Match(scope, self.String.Clone(), regex);
         }
 
         [RubyMethod("=~", Compatibility = RubyCompatibility.Ruby19)]
@@ -169,54 +206,115 @@ namespace IronRuby.Builtins {
 
         [RubyMethod("=~", Compatibility = RubyCompatibility.Ruby19)]
         public static object Match(BinaryOpStorageWithScope/*!*/ storage, RubyScope/*!*/ scope, RubySymbol/*!*/ self, object obj) {
-            return MutableStringOps.Match(storage, scope, self.ToMutableString(), obj);
+            return MutableStringOps.Match(storage, scope, self.String.Clone(), obj);
         }
 
         [RubyMethod("match", Compatibility = RubyCompatibility.Ruby19)]
         public static object Match(BinaryOpStorageWithScope/*!*/ storage, RubyScope/*!*/ scope, RubySymbol/*!*/ self, [NotNull]RubyRegex/*!*/ regex) {
-            return MutableStringOps.Match(storage, scope, self.ToMutableString(), regex);
+            return MutableStringOps.Match(storage, scope, self.String.Clone(), regex);
         }
 
         [RubyMethod("match", Compatibility = RubyCompatibility.Ruby19)]
         public static object Match(BinaryOpStorageWithScope/*!*/ storage, RubyScope/*!*/ scope, RubySymbol/*!*/ self, [DefaultProtocol, NotNull]MutableString/*!*/ pattern) {
-            return MutableStringOps.Match(storage, scope, self.ToMutableString(), pattern);
+            return MutableStringOps.Match(storage, scope, self.String.Clone(), pattern);
         }
 
         #endregion
 
-        // []
-        
+        #region slice, []
+
+        [RubyMethod("[]")]
+        [RubyMethod("slice")]
+        public static MutableString GetChar(RubySymbol/*!*/ self, [DefaultProtocol]int index) {
+            return MutableStringOps.GetChar(self.String, index);
+        }
+
+        [RubyMethod("[]")]
+        [RubyMethod("slice")]
+        public static MutableString GetSubstring(RubySymbol/*!*/ self, [DefaultProtocol]int start, [DefaultProtocol]int count) {
+            return MutableStringOps.GetSubstring(self.String, start, count);
+        }
+
+        [RubyMethod("[]")]
+        [RubyMethod("slice")]
+        public static MutableString GetSubstring(ConversionStorage<int>/*!*/ fixnumCast, RubySymbol/*!*/ self, [NotNull]Range/*!*/ range) {
+            return MutableStringOps.GetSubstring(fixnumCast, self.String, range);
+        }
+
+        [RubyMethod("[]")]
+        [RubyMethod("slice")]
+        public static MutableString GetSubstring(RubySymbol/*!*/ self, [NotNull]MutableString/*!*/ searchStr) {
+            return MutableStringOps.GetSubstring(self.String, searchStr);
+        }
+
+        [RubyMethod("[]")]
+        [RubyMethod("slice")]
+        public static MutableString GetSubstring(RubyScope/*!*/ scope, RubySymbol/*!*/ self, [NotNull]RubyRegex/*!*/ regex) {
+            return MutableStringOps.GetSubstring(scope, self.String, regex);
+        }
+
+        [RubyMethod("[]")]
+        [RubyMethod("slice")]
+        public static MutableString GetSubstring(RubyScope/*!*/ scope, RubySymbol/*!*/ self, [NotNull]RubyRegex/*!*/ regex, [DefaultProtocol]int occurrance) {
+            return MutableStringOps.GetSubstring(scope, self.String, regex, occurrance);
+        }
+
+        #endregion
+
+        #region empty?, encoding, size/length
+
         // encoding aware
-        [RubyMethod("empty?", Compatibility = RubyCompatibility.Ruby19)]
+        [RubyMethod("empty?")]
         public static bool IsEmpty(RubySymbol/*!*/ self) {
             return self.IsEmpty;
         }
 
         // encoding aware
-        [RubyMethod("encoding", Compatibility = RubyCompatibility.Ruby19)]
+        [RubyMethod("encoding")]
         public static RubyEncoding/*!*/ GetEncoding(RubySymbol/*!*/ self) {
             return self.Encoding;
         }
 
         // encoding aware
-        [RubyMethod("size", Compatibility = RubyCompatibility.Ruby19)]
-        [RubyMethod("length", Compatibility = RubyCompatibility.Ruby19)]
+        [RubyMethod("size")]
+        [RubyMethod("length")]
         public static int GetLength(RubySymbol/*!*/ self) {
-            return (self.Encoding.IsKCoding) ? self.GetByteCount() : self.GetCharCount();
+            return self.GetCharCount();
         }
-
-        // next
-        // succ
-        // slice
-
-        // swapcase
-        // upcase
-        // capitalize
-        // downcase
 
         #endregion
 
-        #region Public Singleton Methods
+        #region downcase, upcase, swapcase, capitalize, next/succ
+
+        [RubyMethod("downcase")]
+        public static RubySymbol/*!*/ DownCase(RubyContext/*!*/ context, RubySymbol/*!*/ self) {
+            return context.CreateSymbol(MutableStringOps.DownCase(self.String));
+        }
+
+        [RubyMethod("upcase")]
+        public static RubySymbol/*!*/ UpCase(RubyContext/*!*/ context, RubySymbol/*!*/ self) {
+            return context.CreateSymbol(MutableStringOps.UpCase(self.String));
+        }
+
+        [RubyMethod("swapcase")]
+        public static RubySymbol/*!*/ SwapCase(RubyContext/*!*/ context, RubySymbol/*!*/ self) {
+            return context.CreateSymbol(MutableStringOps.SwapCase(self.String));
+        }
+
+        [RubyMethod("capitalize")]
+        public static RubySymbol/*!*/ Capitalize(RubyContext/*!*/ context, RubySymbol/*!*/ self) {
+            return context.CreateSymbol(MutableStringOps.Capitalize(self.String));
+        }
+
+        [RubyMethod("next")]
+        [RubyMethod("succ")]
+        public static RubySymbol/*!*/ Succ(RubyContext/*!*/ context, RubySymbol/*!*/ self) {
+            return context.CreateSymbol(MutableStringOps.Succ(self.String));
+        }
+
+        #endregion
+
+        #region all_symbols
 
         [RubyMethod("all_symbols", RubyMethodAttributes.PublicSingleton)]
         public static RubyArray/*!*/ GetAllSymbols(RubyClass/*!*/ self) {
