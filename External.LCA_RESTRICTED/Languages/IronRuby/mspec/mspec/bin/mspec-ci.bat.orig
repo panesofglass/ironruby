@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 @"%RUBY19_EXE%" "%~dpn0" %*
+=======
+@"%RUBY19_EXE%" "%~dpn0" %*
+>>>>>>> 4ac0e950bd1e1392ee774b0c575d9ab9f19bd583

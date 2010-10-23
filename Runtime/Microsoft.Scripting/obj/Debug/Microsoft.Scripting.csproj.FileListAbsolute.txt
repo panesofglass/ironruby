@@ -1,0 +1,1 @@
+C:\Users\ryan\dev\ironruby\Runtime\Microsoft.Scripting\obj\Debug\ResolveAssemblyReference.cache
