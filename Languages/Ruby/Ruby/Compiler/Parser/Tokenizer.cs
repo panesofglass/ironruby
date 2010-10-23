@@ -53,7 +53,7 @@ namespace IronRuby.Compiler {
 
         public bool AllowNonAsciiIdentifiers {
             get { return _multiByteIdentifier < Int32.MaxValue; }
-            set { _multiByteIdentifier = AllowMultiByteIdentifier(value); }
+            set { _multiByteIdentifier = value ? AllowMultiByteIdentifier : Int32.MaxValue; }
         }
 
         internal RubyEncoding/*!*/ Encoding {
@@ -2714,7 +2714,11 @@ namespace IronRuby.Compiler {
             content.Append((char)c);
         }
 
-        private static string/*!*/ UnicodeCodePointToString(int codepoint) {
+        /// <summary>
+        /// Converts all codepoints in range [0, 0x10ffff] to a string.
+        /// Undefined for codepoint greater than 0x10ffff.
+        /// </summary>
+        public static string/*!*/ UnicodeCodePointToString(int codepoint) {
             if (codepoint < 0x10000) {
                 // code-points [0xd800 .. 0xdffff] are not treated as invalid
                 return new String((char)codepoint, 1);
@@ -3818,11 +3822,9 @@ namespace IronRuby.Compiler {
             return Int32.MaxValue;
         }
 
-        private static int AllowMultiByteIdentifier(bool allowMultiByteIdentifier) {
-            // MRI 1.9 consideres all characters greater than 0x007f as identifiers.
-            // Surrogate pairs are composed to a single character that is also considered an identifier.
-            return allowMultiByteIdentifier ? 0x07f : Int32.MaxValue;
-        }
+        // MRI 1.9 consideres all characters greater than 0x007f as identifiers.
+        // Surrogate pairs are composed to a single character that is also considered an identifier.
+        private const int AllowMultiByteIdentifier = 0x07f;
 
         private bool IsIdentifier(int c) {
             return IsIdentifier(c, _multiByteIdentifier);
@@ -4154,46 +4156,43 @@ namespace IronRuby.Compiler {
 
         #region Names
 
-        public static bool IsConstantName(string name, bool allowMultiByteCharacters) {
-            int multiByteIdentifier = AllowMultiByteIdentifier(allowMultiByteCharacters);
+        public static bool IsConstantName(string name) {
             return !String.IsNullOrEmpty(name) 
                 && IsUpperLetter(name[0])
-                && IsVariableName(name, 1, 1, multiByteIdentifier)
-                && IsIdentifier(name[name.Length - 1], multiByteIdentifier);
+                && IsVariableName(name, 1, 1, AllowMultiByteIdentifier)
+                && IsIdentifier(name[name.Length - 1], AllowMultiByteIdentifier);
         }
 
-        public static bool IsVariableName(string name, bool allowMultiByteCharacters) {
-            int multiByteIdentifier = AllowMultiByteIdentifier(allowMultiByteCharacters);
+        public static bool IsVariableName(string name) {
             return !String.IsNullOrEmpty(name)
-                && IsIdentifierInitial(name[0], multiByteIdentifier)
-                && IsVariableName(name, 1, 0, multiByteIdentifier);
+                && IsIdentifierInitial(name[0], AllowMultiByteIdentifier)
+                && IsVariableName(name, 1, 0, AllowMultiByteIdentifier);
         }
 
-        public static bool IsMethodName(string name, bool allowMultiByteCharacters) {
-            int multiByteIdentifier = AllowMultiByteIdentifier(allowMultiByteCharacters);
+        public static bool IsMethodName(string name) {
             return !String.IsNullOrEmpty(name)
-                && IsIdentifierInitial(name[0], multiByteIdentifier)
-                && IsVariableName(name, 1, 1, multiByteIdentifier)
-                && IsMethodNameSuffix(name[name.Length - 1], multiByteIdentifier);
+                && IsIdentifierInitial(name[0], AllowMultiByteIdentifier)
+                && IsVariableName(name, 1, 1, AllowMultiByteIdentifier)
+                && IsMethodNameSuffix(name[name.Length - 1], AllowMultiByteIdentifier);
         }
 
-        public static bool IsInstanceVariableName(string name, bool allowMultiByteCharacters) {
+        public static bool IsInstanceVariableName(string name) {
             return name != null && name.Length >= 2
                 && name[0] == '@'
-                && IsVariableName(name, 1, 0, AllowMultiByteIdentifier(allowMultiByteCharacters));
+                && IsVariableName(name, 1, 0, AllowMultiByteIdentifier);
         }
 
-        public static bool IsClassVariableName(string name, bool allowMultiByteCharacters) {
+        public static bool IsClassVariableName(string name) {
             return name != null && name.Length >= 3
                 && name[0] == '@'
                 && name[1] == '@'
-                && IsVariableName(name, 2, 0, AllowMultiByteIdentifier(allowMultiByteCharacters));
+                && IsVariableName(name, 2, 0, AllowMultiByteIdentifier);
         }
 
-        public static bool IsGlobalVariableName(string name, bool allowMultiByteCharacters) {
+        public static bool IsGlobalVariableName(string name) {
             return name != null && name.Length >= 2
                 && name[0] == '$'
-                && IsVariableName(name, 1, 0, AllowMultiByteIdentifier(allowMultiByteCharacters));
+                && IsVariableName(name, 1, 0, AllowMultiByteIdentifier);
         }
 
         private static bool IsVariableName(string name, int trimStart, int trimEnd, int multiByteIdentifier) {

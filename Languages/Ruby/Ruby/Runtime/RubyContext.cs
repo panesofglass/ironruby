@@ -69,6 +69,8 @@ namespace IronRuby.Runtime {
             get { return 0; }
         }
 
+        public const string BinDirEnvironmentVariable = "IRONRUBY_11";
+
         // IronRuby:
         public const string IronRubyInformationalVersion = "1.1.1";
 #if !SILVERLIGHT
@@ -145,7 +147,7 @@ namespace IronRuby.Runtime {
 
         #region Random Number Generator
 
-        private object _randomNumberGeneratorLock = new object();
+        private readonly object _randomNumberGeneratorLock = new object();
         private Random _randomNumberGenerator; // lazy
         private object _randomNumberGeneratorSeed = ScriptingRuntimeHelpers.Int32ToObject(0);
 
@@ -2027,11 +2029,6 @@ namespace IronRuby.Runtime {
             RubyExceptionData.GetInstance(e).Backtrace = array;
             return array;
         }
-
-        /// <summary>
-        /// $KCODE
-        /// </summary>
-        public RubyEncoding KCode { get; internal set; }
         
         /// <summary>
         /// $SAFE
@@ -2370,18 +2367,14 @@ namespace IronRuby.Runtime {
         /// <exception cref="InvalidError">Invalid characters present.</exception>
         public string/*!*/ DecodePath(MutableString/*!*/ path) {
             try {
-                if (KCode != null) {
-                    return path.ToString(KCode.StrictEncoding);
-                } else if (path.IsBinaryEncoded) {
+                if (path.IsBinaryEncoded) {
                     // force UTF8 encoding to make round-trip work:
                     return path.ToString(Encoding.UTF8);
                 } else {
                     return path.ConvertToString();
                 }
             } catch (DecoderFallbackException) {
-                throw RubyExceptions.CreateEINVAL("Invalid multi-byte sequence in path `{0}'", path.ToAsciiString(
-                    _options.Compatibility < RubyCompatibility.Ruby19
-                ));
+                throw RubyExceptions.CreateEINVAL("Invalid multi-byte sequence in path `{0}'", path.ToAsciiString());
             }
         }
 
@@ -2539,24 +2532,6 @@ namespace IronRuby.Runtime {
             // TODO: we need to save the kind of the scope factory:
             SourceUnit su = new SourceUnit(this, NullTextContentProvider.Null, path, SourceCodeKind.File);
             return new RubyScriptCode((Func<RubyScope, object, object>)method, su, TopScopeFactoryKind.Hosted);
-        }
-
-        public void CheckConstantName(string name) {
-            if (!Tokenizer.IsConstantName(name, _options.Compatibility >= RubyCompatibility.Ruby19 || KCode != null)) {
-                throw RubyExceptions.CreateNameError(String.Format("`{0}' is not allowed as a constant name", name));
-            }
-        }
-
-        public void CheckClassVariableName(string name) {
-            if (!Tokenizer.IsClassVariableName(name, _options.Compatibility >= RubyCompatibility.Ruby19 || KCode != null)) {
-                throw RubyExceptions.CreateNameError(String.Format("`{0}' is not allowed as a class variable name", name));
-            }
-        }
-
-        public void CheckInstanceVariableName(string name) {
-            if (!Tokenizer.IsInstanceVariableName(name, _options.Compatibility >= RubyCompatibility.Ruby19 || KCode != null)) {
-                throw RubyExceptions.CreateNameError(String.Format("`{0}' is not allowed as an instance variable name", name));
-            }
         }
 
         #endregion
@@ -2928,7 +2903,7 @@ namespace IronRuby.Runtime {
         /// <exception cref="ArgumentException">Unknown encoding.</exception>
         public RubyEncoding/*!*/ GetRubyEncoding(MutableString/*!*/ name) {
             if (!name.IsAscii()) {
-                throw new ArgumentException(String.Format("Unknown encoding: '{0}'", name.ToAsciiString(false)));
+                throw new ArgumentException(String.Format("Unknown encoding: '{0}'", name.ToAsciiString()));
             }
             return RubyEncoding.GetRubyEncoding(GetEncodingByRubyName(name.ToString()));
         }

@@ -761,21 +761,13 @@ namespace IronRuby.Builtins {
         }
 
         public bool Equals(MutableString other) {
-            if (ReferenceEquals(this, other)) return true;
             if (ReferenceEquals(other, null)) return false;
 
             if (KnowsHashCode && other.KnowsHashCode && _hashCode != other._hashCode) {
                 return false;
             }
 
-            if (_encoding != other._encoding) {
-                // only ASCII strings might compare equal if their encodings are different:
-                if (!IsAscii() || !other.IsAscii()) {
-                    return false;
-                }
-            }
-
-            return _content.OrdinalCompareTo(other._content) == 0;
+            return CompareTo(other) == 0;
         }
 
         public int CompareTo(object obj) {
@@ -786,14 +778,22 @@ namespace IronRuby.Builtins {
             if (ReferenceEquals(this, other)) return 0;
             if (ReferenceEquals(other, null)) return 1;
 
+            // TODO: How does MRI deal with invalid characters, surrogates?
             if (_encoding != other._encoding) {
-                // only ASCII strings might compare equal if their encodings are different:
-                if (!IsAscii() || !other.IsAscii()) {
-                    return _encoding.CompareTo(other._encoding);
+                bool bothAscii = true;
+                if (!IsAscii()) {
+                    SwitchToBytes();
+                    bothAscii = false;
                 }
+                if (!other.IsAscii()) {
+                    other.SwitchToBytes();
+                    bothAscii = false;
+                }
+                int result = _content.OrdinalCompareTo(other._content);
+                return !bothAscii && result == 0 ? _encoding.CompareTo(other._encoding) : result;
+            } else {
+                return _content.OrdinalCompareTo(other._content);
             }
-
-            return _content.OrdinalCompareTo(other._content);
         }
 
         #endregion
@@ -2121,11 +2121,7 @@ namespace IronRuby.Builtins {
                         result.Append('\\');
                         result.Append((char)quote);
                     } else if (currentChar < 0x0020 || currentChar >= 0x080 && (escape & Escape.NonAscii) != 0) {
-                        if ((escape & Escape.Octal) != 0) {
-                            AppendOctalEscape(result, currentChar);
-                        } else {
-                            AppendHexEscape(result, currentChar);
-                        }
+                        AppendHexEscape(result, currentChar);
                     } else {
                         result.Append((char)currentChar);
                     }
@@ -2182,13 +2178,6 @@ namespace IronRuby.Builtins {
             result.Append((c & 0xf).ToUpperHexDigit());
         }
 
-        private static void AppendOctalEscape(StringBuilder/*!*/ result, int c) {
-            result.Append('\\');
-            result.Append((char)('0' + (c >> 6)));
-            result.Append((char)('0' + ((c >> 3) & 7)));
-            result.Append((char)('0' + (c & 7)));
-        }
-
         private string/*!*/ ToStringWithEscapedInvalidCharacters(RubyEncoding/*!*/ encoding, bool octalEscapes, out int escapePlaceholder) {
             Debug.Assert(encoding != RubyEncoding.Binary);
             if (IsBinary || encoding != _encoding) {
@@ -2202,9 +2191,8 @@ namespace IronRuby.Builtins {
         /// <summary>
         /// Returns a string with all non-ASCII characters replaced by escaped Unicode or hexadecimal numeric sequences.
         /// </summary>
-        public string/*!*/ ToAsciiString(bool octalEscapes) {
-            Escape escape = Escape.NonAscii | (octalEscapes ? Escape.Octal : 0);
-            var result = AppendRepresentation(new StringBuilder(), null, escape, -1).ToString();
+        public string/*!*/ ToAsciiString() {
+            var result = AppendRepresentation(new StringBuilder(), null, Escape.NonAscii, -1).ToString();
             Debug.Assert(result.IsAscii());
             return result;
         }

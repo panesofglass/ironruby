@@ -159,9 +159,14 @@ namespace IronRuby.Runtime {
             }
             
 #if !SILVERLIGHT // no library paths on Silverlight
+            // TODO: this should rather come from Machine.config
+
             string applicationBaseDir;
             try {
-                applicationBaseDir = AppDomain.CurrentDomain.BaseDirectory;
+                applicationBaseDir = _context.Platform.GetEnvironmentVariable(RubyContext.BinDirEnvironmentVariable);
+                if (!Directory.Exists(applicationBaseDir)) {
+                    applicationBaseDir = AppDomain.CurrentDomain.BaseDirectory;
+                }
             } catch (SecurityException) {
                 applicationBaseDir = null;
             }
@@ -760,7 +765,7 @@ namespace IronRuby.Runtime {
                 return null;
             }
 
-            var sourceUnit = language.CreateFileUnit(path, RubyEncoding.Binary.Encoding, SourceCodeKind.File);
+            var sourceUnit = language.CreateFileUnit(path, RubyEncoding.Ascii.Encoding, SourceCodeKind.File);
             return new ResolvedFile(sourceUnit, fullPath, extensionAppended ? extension : null);
         }
 

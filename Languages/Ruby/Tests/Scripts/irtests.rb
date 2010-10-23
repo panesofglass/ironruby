@@ -20,8 +20,15 @@ class IRTest
       end 
     end
     
+    if ENV['DLR_VM'] and ENV['DLR_VM'].include?("mono.exe")
+      options[:mono] = true
+    elsif options[:mono]
+      # assume mono.exe is on path
+      ENV['DLR_VM'] ||= 'mono.exe'
+    end
+    
     @options = options
-    if options[:clr2] or options[:mono]
+    if options[:clr2]
       if options[:release]
         @config = "v2Release"
         @sl_config = "Silverlight3Release"
@@ -51,11 +58,6 @@ class IRTest
     if explicit_config or not ENV["DLR_BIN"]
       ENV["DLR_BIN"] = "#@root/bin/#@config"
     end
-
-    if options[:mono]
-      # assume mono.exe is on path
-      ENV['DLR_VM'] ||= 'mono'
-    end
     
     ENV['HOME'] ||= ENV["USERPROFILE"]
     
@@ -73,14 +75,12 @@ class IRTest
       ]
     else
       @all_tasks = {
-        :ProjGenerator    => lambda { generate_build_projects },
-        :BuildSilverlight => silverlight_build_runner,
         :Smoke            => safe_ruby_runner(dlr_path('Languages/Ruby/Tests/Scripts/unit_tests.rb')),
         #:Legacy           => safe_ruby_runner(dlr_path('Languages/Ruby/Tests/run.rb')),
         :RubySpec_A       => spec_runner(":lang :cli :netinterop :cominterop :thread :netcli"),
         :RubySpec_B       => spec_runner(":core1 :lib1"),
         :RubySpec_C       => spec_runner(":core2 :lib2"),
-        #:RubyGems         => utr_runner("gem"),
+        :RubyGems         => utr_runner("gem"),
         :TZInfo           => utr_runner("tzinfo"),
         :Rake             => utr_runner("rake"),
         :Yaml             => ruby_runner(dlr_path('External.LCA_RESTRICTED/Languages/IronRuby/yaml/YamlTest/yaml_test_suite.rb')),
@@ -88,6 +88,9 @@ class IRTest
         # TODO: get rid of .bat file
         #:Tutorial         => shell_runner("#{dlr_path('Languages/Ruby/Samples/Tutorial/tutorial.bat')} #{dlr_path('Languages/Ruby/Samples/Tutorial/test/test_console.rb')}"),
       }
+      
+      @all_tasks[:BuildSilverlight] = silverlight_build_runner unless options[:nocompile]
+      @all_tasks[:ProjGenerator] = lambda { generate_build_projects } unless git?
     
       if not options[:minimum]
         @all_tasks.merge!({
@@ -326,10 +329,7 @@ class IRTest
   end
   
   def git?
-    git = File.exists? dlr_path("../../.git") # exists only for github.com
-    tfs = File.exists? dlr_path("Internal/Dlr.sln") # exists only in TFS
-    abort("Could not determine if this is a GIT repo or not") if git == tfs
-    git
+    not File.exists? dlr_path("Internal/Dlr.sln")
   end
   
   def prereqs
