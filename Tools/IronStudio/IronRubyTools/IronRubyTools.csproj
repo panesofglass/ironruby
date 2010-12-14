@@ -12,10 +12,6 @@
     <AssemblyName>IronRubyTools</AssemblyName>
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <ProjectGuid>{3467BF9A-3A0F-42BE-85E3-E818E7D3E2E8}</ProjectGuid>
-    <SccProjectName>SAK</SccProjectName>
-    <SccLocalPath>SAK</SccLocalPath>
-    <SccAuxPath>SAK</SccAuxPath>
-    <SccProvider>SAK</SccProvider>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -66,7 +62,7 @@
       </IncludeOutputGroupsInVSIXLocalOnly>
       <Private>False</Private>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\External.LCA_RESTRICTED\Languages\IronRuby\yaml\IronRuby.Libraries.Yaml\IronRuby.Libraries.Yaml.csproj">
+    <ProjectReference Include="..\..\..\Languages\Ruby\Libraries.Yaml\IronRuby.Libraries.Yaml.csproj">
       <Project>{AA18A245-E342-4368-A474-83178311A742}</Project>
       <Name>IronRuby.Libraries.Yaml</Name>
       <IncludeOutputGroupsInVSIX>
@@ -76,7 +72,7 @@
         DebugSymbolsProjectOutputGroup
       </IncludeOutputGroupsInVSIXLocalOnly>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\Languages\Ruby\Libraries.LCA_RESTRICTED\IronRuby.Libraries.csproj">
+    <ProjectReference Include="..\..\..\Languages\Ruby\Libraries\IronRuby.Libraries.csproj">
       <Project>{77323B06-15A2-4CF4-8A7A-86EAA2B66498}</Project>
       <Name>IronRuby.Libraries</Name>
       <IncludeOutputGroupsInVSIX>
@@ -301,6 +297,14 @@
     <Content Include="Templates\Projects\ConsoleAppProject\IronRubyApp.rbproj" />
     <Content Include="Templates\Projects\ConsoleAppProject\Program.rb" />
     <Content Include="Templates\Projects\ConsoleAppProject\__TemplateIcon.ico" />
+    <!-- WinForms -->
+    <Content Include="Templates\Projects\WinFormsAppProject\WinFormsApp.zip">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <Content Include="Templates\Projects\WinFormsAppProject\WinFormsApp.vstemplate" />
+    <Content Include="Templates\Projects\WinFormsAppProject\WinFormsApp.rbproj" />
+    <Content Include="Templates\Projects\WinFormsAppProject\Program.rb" />
+    <Content Include="Templates\Projects\WinFormsAppProject\__TemplateIcon.ico" />
     <!-- Silverlight -->
     <Content Include="Templates\Projects\SilverlightProject\SilverlightProject.zip">
       <IncludeInVSIX>true</IncludeInVSIX>

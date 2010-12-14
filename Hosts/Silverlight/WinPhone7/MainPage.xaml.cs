@@ -22,6 +22,8 @@ using System.Windows.Media;
 using IronRuby;
 using Microsoft.Phone.Controls;
 using Microsoft.Scripting.Hosting;
+using Microsoft.Scripting.Generation;
+using System.Runtime.CompilerServices;
 
 namespace PhoneScripter {
     public partial class MainPage : PhoneApplicationPage {

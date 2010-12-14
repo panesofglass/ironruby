@@ -72,13 +72,13 @@ namespace IronRuby.Runtime {
         public const string BinDirEnvironmentVariable = "IRONRUBY_11";
 
         // IronRuby:
-        public const string IronRubyInformationalVersion = "1.1.1";
+        public const string IronRubyInformationalVersion = "1.1.2";
 #if !SILVERLIGHT
-        public const string/*!*/ IronRubyVersionString = "1.1.1.0";
-        public static readonly Version IronRubyVersion = new Version(1, 1, 1, 0);
+        public const string/*!*/ IronRubyVersionString = "1.1.2.0";
+        public static readonly Version IronRubyVersion = new Version(1, 1, 2, 0);
 #else
-        public const string/*!*/ IronRubyVersionString = "1.1.1301.0";
-        public static readonly Version IronRubyVersion = new Version(1, 1, 1301, 0);
+        public const string/*!*/ IronRubyVersionString = "1.1.1302.0";
+        public static readonly Version IronRubyVersion = new Version(1, 1, 1302, 0);
         
 #endif
         internal const string/*!*/ IronRubyDisplayName = "IronRuby";
@@ -611,7 +611,7 @@ namespace IronRuby.Runtime {
             }
         }
 
-        internal static string/*!*/ MakeDescriptionString() {
+        public static string/*!*/ MakeDescriptionString() {
             return String.Format(CultureInfo.InvariantCulture, "IronRuby {0} on {1}", IronRubyVersion, MakeRuntimeDesriptionString());
         }
 

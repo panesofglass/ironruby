@@ -2,8 +2,7 @@ require File.join(this_dir = File.dirname(__FILE__), "../harvest.rb")
 
 WXIs = [
   ["Msm/Samples.wxi",      "Languages/Ruby/Samples"],
-  ["Msm/IronRubyLibs.wxi", "Languages/Ruby/Libs"],
-  ["Msm/RubyLibs.wxi",     "External.LCA_RESTRICTED/Languages/Ruby/redist-libs/ruby"],
+  ["Msm/StdLib.wxi",       "Languages/Ruby/StdLib"],
 ]
 
 WXIs.each do |wxi, dir|
