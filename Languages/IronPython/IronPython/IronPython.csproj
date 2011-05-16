@@ -127,6 +127,8 @@
     <Compile Include="Compiler\PythonDynamicExpression.cs" />
     <Compile Include="Compiler\UncollectableCompilationMode.Generated.cs" />
     <Compile Include="Compiler\RunnableScriptCode.cs" />
+    <Compile Include="Modules\unicodedata.cs" />
+    <Compile Include="Modules\_ast.cs" />
     <Compile Include="Runtime\Binding\IPythonExpandable.cs" />
     <Compile Include="Runtime\Binding\PythonExtensionBinder.cs" />
     <Compile Include="Runtime\BuiltinPythonModule.cs" />
@@ -515,8 +517,9 @@
     <Reference Include="System" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
-    <Reference Include="System.Numerics" Condition=" '$(TargetFrameworkVersion)' == 'v4.0' " />
     <Reference Include="System.Core" />
+    <Reference Include="System.Numerics" Condition=" '$(TargetFrameworkVersion)' == 'v4.0' " />
+    <Reference Include="System.Xaml" Condition=" '$(TargetFrameworkVersion)' == 'v4.0' " />
   </ItemGroup>
   <ItemGroup Condition=" '$(SilverlightBuild)' == 'true' ">
     <Reference Include="mscorlib, Version=2.0.5.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e">
@@ -608,9 +611,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="IronPython.ruleset" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="System.Xaml" />
+    <EmbeddedResource Include="Modules\unicodedata\IPyUnicodeData.txt.gz" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" Condition=" '$(SilverlightTreeBuild)' != 'true' " />
 </Project>

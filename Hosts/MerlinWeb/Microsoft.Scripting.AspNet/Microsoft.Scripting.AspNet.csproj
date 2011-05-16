@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
-  <Import Project="$(SolutionDir)..\Solutions\Common.proj" />
+  <Import Project="$(ProjectDir)..\..\..\Solutions\Common.proj" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -97,15 +97,19 @@
     <None Include="MicrosoftSharedLibraries2Key.snk" />
   </ItemGroup>
   <ItemGroup>
+    <Reference Include="Microsoft.CSharp" Condition=" '$(TargetFrameworkVersion)' == 'v4.0' " />
     <Reference Include="System" />
     <Reference Include="System.configuration" />
     <Reference Include="System.Data" />
     <Reference Include="System.Core" />
     <Reference Include="System.Web" />
-    <Reference Include="System.Web.RegularExpressions" />
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\..\Runtime\Microsoft.Scripting.Core\Microsoft.Scripting.Core.csproj" Condition="'$(TargetFrameworkVersion)' != 'v4.0'">
+      <Project>{2AE75F5A-CD1F-4925-9647-AF4D1C282FB4}</Project>
+      <Name>Microsoft.Scripting.Core</Name>
+    </ProjectReference>
     <ProjectReference Include="$(SolutionDir)..\Runtime\Microsoft.Scripting\Microsoft.Scripting.csproj">
       <Project>{02FF0909-F5AD-48CF-A86A-345E721B7E40}</Project>
       <Name>Microsoft.Scripting</Name>

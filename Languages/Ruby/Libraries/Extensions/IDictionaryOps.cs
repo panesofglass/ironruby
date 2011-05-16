@@ -70,8 +70,6 @@ namespace IronRuby.Builtins {
 
         #endregion
 
-        #region Instance Methods
-
         [RubyMethod("==")]
         public static bool Equals(RespondToStorage/*!*/ respondTo, BinaryOpStorage/*!*/ equals, IDictionary<object, object>/*!*/ self, object other) {
             return Protocols.RespondTo(respondTo, other, "to_hash") && Protocols.IsEqual(equals, other, self);
@@ -109,8 +107,8 @@ namespace IronRuby.Builtins {
             }
 
             return true;
-        }        
-        
+        }
+
         [RubyMethod("[]")]
         public static object GetElement(RubyContext/*!*/ context, IDictionary<object, object>/*!*/ self, object key) {
             object result;
@@ -170,6 +168,8 @@ namespace IronRuby.Builtins {
             return null;
         }
 
+        #region delete, delete_if
+
         [RubyMethod("delete")]
         public static object Delete(BlockParam block, Hash/*!*/ self, object key) {
             self.RequireNotFrozen();
@@ -227,8 +227,19 @@ namespace IronRuby.Builtins {
             return self;
         }
 
+        #endregion
+
+        #region each, each_pair, each_key, each_value
+
         [RubyMethod("each")]
-        public static object Each(RubyContext/*!*/ context, BlockParam block, IDictionary<object, object>/*!*/ self) {
+        [RubyMethod("each_pair")]
+        public static Enumerator/*!*/ Each(RubyContext/*!*/ context, IDictionary<object, object>/*!*/ self) {
+            return new Enumerator((_, block) => Each(context, block, self));
+        }
+
+        [RubyMethod("each")]
+        [RubyMethod("each_pair")]
+        public static object Each(RubyContext/*!*/ context, [NotNull]BlockParam/*!*/ block, IDictionary<object, object>/*!*/ self) {
             if (self.Count > 0) {
                 // Must make a copy of the Keys array so that we can iterate over a static set of keys. Remember
                 // that the block can modify the hash, hence the need for a copy of the keys
@@ -246,29 +257,14 @@ namespace IronRuby.Builtins {
 
             return self;
         }
-
-        [RubyMethod("each_pair")]
-        public static object EachPair(RubyContext/*!*/ context, BlockParam block, IDictionary<object, object>/*!*/ self) {
-            if (self.Count > 0) {
-                // Must make a copy of the Keys array so that we can iterate over a static set of keys. Remember
-                // that the block can modify the hash, hence the need for a copy of the keys
-                object[] keys = new object[self.Count];
-                self.Keys.CopyTo(keys, 0);
-
-                // TODO: what are all the scenarios where the block can mutate the hash? can it remove keys? if so, what happens?
-                for (int i = 0; i < keys.Length; i++) {
-                    object result;
-                    if (block.Yield(CustomStringDictionary.ObjToNull(keys[i]), self[keys[i]], out result)) {
-                        return result;
-                    }
-                }
-            }
-
-            return self;
+        
+        [RubyMethod("each_key")]
+        public static Enumerator/*!*/ EachKey(RubyContext/*!*/ context, IDictionary<object, object>/*!*/ self) {
+            return new Enumerator((_, block) => EachKey(context, block, self));
         }
 
         [RubyMethod("each_key")]
-        public static object EachKey(RubyContext/*!*/ context, BlockParam block, IDictionary<object, object>/*!*/ self) {
+        public static object EachKey(RubyContext/*!*/ context, [NotNull]BlockParam/*!*/ block, IDictionary<object, object>/*!*/ self) {
             if (self.Count > 0) {
                 // Must make a copy of the Keys array so that we can iterate over a static set of keys. Remember
                 // that the block can modify the hash, hence the need for a copy of the keys
@@ -288,7 +284,12 @@ namespace IronRuby.Builtins {
         }
 
         [RubyMethod("each_value")]
-        public static object EachValue(RubyContext/*!*/ context, BlockParam block, IDictionary<object, object>/*!*/ self) {
+        public static Enumerator/*!*/ EachValue(RubyContext/*!*/ context, IDictionary<object, object>/*!*/ self) {
+            return new Enumerator((_, block) => EachValue(context, block, self));
+        }
+
+        [RubyMethod("each_value")]
+        public static object EachValue(RubyContext/*!*/ context, [NotNull]BlockParam/*!*/ block, IDictionary<object, object>/*!*/ self) {
             if (self.Count > 0) {
                 // Ruby allows modifications while iterating thru the dictionary:
                 object[] values = new object[self.Count];
@@ -304,6 +305,8 @@ namespace IronRuby.Builtins {
 
             return self;
         }
+
+        #endregion
 
         [RubyMethod("empty?")]
         public static bool Empty(IDictionary<object, object>/*!*/ self) {
@@ -360,13 +363,6 @@ namespace IronRuby.Builtins {
                 }
             }
             return null;
-        }
-
-        [RubyMethod("indexes")]
-        [RubyMethod("indices")]
-        public static RubyArray/*!*/ Indexes(RubyContext/*!*/ context, IDictionary<object, object>/*!*/ self, params object[]/*!*/ keys) {
-            context.ReportWarning("Hash#indices is deprecated; use Hash#values_at");
-            return ValuesAt(context, self, keys);
         }
 
         [RubyMethod("invert")]
@@ -494,22 +490,26 @@ namespace IronRuby.Builtins {
         }
 
         [RubyMethod("select")]
-        public static object Select(RubyContext/*!*/ context, BlockParam block, IDictionary<object, object>/*!*/ self) {
-            RubyArray list = new RubyArray();
+        public static Enumerator/*!*/ Select(RubyContext/*!*/ context, IDictionary<object, object>/*!*/ self) {
+            return new Enumerator((_, block) => Select(context, block, self));
+        }
+
+        [RubyMethod("select")]
+        public static object Select(RubyContext/*!*/ context, [NotNull]BlockParam/*!*/ block, IDictionary<object, object>/*!*/ self) {
+            Hash result = new Hash(context);
 
             foreach (var pair in CopyKeyValuePairs(self)) {
-                object result;
-                if (block.Yield(CustomStringDictionary.ObjToNull(pair.Key), pair.Value, out result)) {
-                    return result;
+                object blockResult;
+                if (block.Yield(CustomStringDictionary.ObjToNull(pair.Key), pair.Value, out blockResult)) {
+                    return blockResult;
                 }
 
-                // Select the key, unless 'false' or 'nil' is returned
-                if (RubyOps.IsTrue(result)) {
-                    list.Add(MakeArray(pair));
+                if (RubyOps.IsTrue(blockResult)) {
+                    result[pair.Key] = pair.Value;
                 }
             }
 
-            return list;
+            return result;
         }
 
         [RubyMethod("shift")]
@@ -542,6 +542,36 @@ namespace IronRuby.Builtins {
             RubyArray result = new RubyArray(self.Count);
             foreach (KeyValuePair<object, object> pair in self) {
                 result.Add(MakeArray(pair));
+            }
+            return result;
+        }
+
+        [RubyMethod("flatten")]
+        public static IList/*!*/ Flatten(ConversionStorage<IList>/*!*/ tryToAry, IDictionary<object, object>/*!*/ self,
+            [DefaultProtocol, DefaultParameterValue(1)] int maxDepth) {
+
+            if (maxDepth == 0) {
+                return ToArray(self);
+            } 
+            
+            if (maxDepth > 0) {
+                maxDepth--;
+            }
+
+            RubyArray result = new RubyArray();
+            IList list;
+            foreach (KeyValuePair<object, object> pair in self) {
+                if (maxDepth != 0 && (list = Protocols.TryCastToArray(tryToAry, pair.Key)) != null) {
+                    IListOps.Flatten(tryToAry, list, maxDepth - 1, result);
+                } else {
+                    result.Add(pair.Key);
+                }
+
+                if (maxDepth != 0 && (list = Protocols.TryCastToArray(tryToAry, pair.Value)) != null) {
+                    IListOps.Flatten(tryToAry, list, maxDepth - 1, result);
+                } else {
+                    result.Add(pair.Value);
+                }
             }
             return result;
         }
@@ -591,8 +621,6 @@ namespace IronRuby.Builtins {
             }
             return values;
         }
-
-        #endregion
     }
 
 }

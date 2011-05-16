@@ -30,9 +30,9 @@ WHEN PERFORMING MAJOR IP UPGRADES (e.g., 2.5 => 2.6):
 
     <!-- Properties -->
     <Property Id="ALLUSERS" Value="1" />
-    <Property Id="ARPHELPLINK" Value="http://lists.ironpython.com/listinfo.cgi/users-ironpython.com" />
+    <Property Id="ARPHELPLINK" Value="http://ironpython.net/support/" />
     <Property Id="ARPURLINFOABOUT" Value="http://www.ironpython.net" />
-    <Property Id="ARPURLUPDATEINFO" Value="http://www.codeplex.com/IronPython" />
+    <Property Id="ARPURLUPDATEINFO" Value="http://ironpython.codeplex.com" />
 
     <!-- We search for an existing file type for .py files.  If it's found we'll use it, otherwise we'll default to Python.File which matches CPython -->
     <Property Id="PYTHONFILETYPE" Value="Python.File">
@@ -71,7 +71,7 @@ WHEN PERFORMING MAJOR IP UPGRADES (e.g., 2.5 => 2.6):
             <Shortcut Id="NGEN6464Shortcut_Console" Directory="Dir_StartMenu" Name="IronPython 64-bit Console" Target="[#NGEN64File_ipy64.exe.B25C469D_12C7_4327_AEF1_B2D3505E115E]" />
             
             <RemoveFolder Id='Comp_ReadMe' On='uninstall'/>
-            <RegistryValue Root='HKCU' Key='SOFTWARE\Microsoft\IronPython\2.7\Docs' Type='string' Value='Installed' KeyPath='yes' />
+            <RegistryValue Root='HKCU' Key='SOFTWARE\IronPython\$(var.ProductVersionText)\Docs' Type='string' Value='Installed' KeyPath='yes' />
           </Component>
         </Directory>
       </Directory>

@@ -56,7 +56,7 @@ namespace IronPython.Runtime {
     public delegate int HashDelegate(object o, ref HashDelegate dlg);
 
     public sealed partial class PythonContext : LanguageContext {
-        internal const string/*!*/ IronPythonDisplayName = "IronPython 2.7 Beta 1";
+        internal const string/*!*/ IronPythonDisplayName = "IronPython 3.0";
         internal const string/*!*/ IronPythonNames = "IronPython;Python;py";
         internal const string/*!*/ IronPythonFileExtensions = ".py";
 
@@ -203,6 +203,7 @@ namespace IronPython.Runtime {
         internal readonly List<FunctionStack> _mainThreadFunctionStack;
         private CallSite<Func<CallSite, CodeContext, object, object>> _callSite0LightEh;
         private List<WeakReference> _weakExtensionMethodSets;
+        private Thread _mainThread;
 
         #region Generated Python Shared Call Sites Storage
 
@@ -352,7 +353,6 @@ namespace IronPython.Runtime {
                 }
 
                 lock (_codeUpdateLock) {
-                    int oldRecLimit = _recursionLimit;
                     _recursionLimit = value;
 
                     if ((_recursionLimit == Int32.MaxValue) != (value == Int32.MaxValue)) {
@@ -397,6 +397,18 @@ namespace IronPython.Runtime {
         internal TopNamespaceTracker TopNamespace {
             get {
                 return _topNamespace;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the main thread which should be interupted by thread.interrupt_main
+        /// </summary>
+        public Thread MainThread {
+            get {
+                return _mainThread;
+            }
+            set {
+                _mainThread = value;
             }
         }
 
@@ -1933,7 +1945,7 @@ namespace IronPython.Runtime {
             dict["executable"] = _initialExecutable;
             SystemState.__dict__["prefix"] =  _initialPrefix;
             dict["exec_prefix"] = _initialPrefix;
-            SetVersionVariables(dict, 2, 7, 0, "alpha", _initialVersionString);
+            SetVersionVariables(dict, 2, 7, 0, "beta", _initialVersionString);
         }
 
         private static void SetVersionVariables(PythonDictionary dict, byte major, byte minor, byte build, string level, string versionString) {
@@ -3312,8 +3324,10 @@ namespace IronPython.Runtime {
             }
 
             CallSite<Func<CallSite, object, object, bool>> res;
-            if (!_equalSites.TryGetValue(type, out res)) {
-                _equalSites[type] = res = MakeEqualSite();
+            lock (_equalSites) { 
+                if (!_equalSites.TryGetValue(type, out res)) {
+                    _equalSites[type] = res = MakeEqualSite();
+                }
             }
 
             return res;

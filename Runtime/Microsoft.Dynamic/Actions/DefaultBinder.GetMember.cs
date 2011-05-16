@@ -210,9 +210,9 @@ namespace Microsoft.Scripting.Actions {
 
             if (members.Count == 0) {
                 if (typeof(TypeTracker).IsAssignableFrom(type)) {
-                    // ensure we don't have a non-generic type, and if we do report an error now.  This matches
-                    // the rule version of the default binder but should probably be removed long term
-                    Type x = ((TypeTracker)target.Value).Type;
+                    // Throws an exception if we don't have a non-generic type, and if we do report an error now.  This matches
+                    // the rule version of the default binder but should probably be removed long term.
+                    EnsureTrackerRepresentsNonGenericType((TypeTracker)target.Value);
                 } else if (type.IsInterface) {
                     // all interfaces have object members
                     type = typeof(object);
@@ -243,6 +243,11 @@ namespace Microsoft.Scripting.Actions {
 
             getMemInfo.Body.Restrictions = restrictions;
             return getMemInfo.Body.GetMetaObject(target);
+        }
+
+        private static Type EnsureTrackerRepresentsNonGenericType(TypeTracker tracker) {
+            // might throw an exception
+            return tracker.Type;
         }
 
         private void MakeBodyHelper(GetMemberInfo getMemInfo, DynamicMetaObject self, DynamicMetaObject propSelf, Type type, MemberGroup members) {

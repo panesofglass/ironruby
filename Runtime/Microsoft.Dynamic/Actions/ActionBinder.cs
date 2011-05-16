@@ -128,9 +128,7 @@ namespace Microsoft.Scripting.Actions {
                 return expr;
             }
 
-            Type visType = CompilerHelpers.GetVisibleType(toType);
-
-            return Expression.Convert(expr, toType);
+            return Expression.Convert(expr, CompilerHelpers.GetVisibleType(toType));
         }
 
         /// <summary>
@@ -448,7 +446,7 @@ namespace Microsoft.Scripting.Actions {
             if (!target.Success) {
                 BindingRestrictions restrictions = BindingRestrictions.Combine(parameters);
                 foreach (DynamicMetaObject mo in parameters) {
-                    restrictions = restrictions.Merge(BindingRestrictions.GetTypeRestriction(mo.Expression, mo.GetLimitType()));
+                    restrictions = restrictions.Merge(BindingRestrictionsHelpers.GetRuntimeTypeRestriction(mo.Expression, mo.GetLimitType()));
                 }
                 return DefaultBinder.MakeError(
                     resolver.MakeInvalidParametersError(target),

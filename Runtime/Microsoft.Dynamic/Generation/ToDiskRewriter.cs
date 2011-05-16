@@ -74,11 +74,26 @@ namespace Microsoft.Scripting.Generation {
                     }
 
                     // Add the consant pool variable to the top lambda
-                    body = AstUtils.AddScopedVariable(
-                        body,
+                    // We first create the array and then assign into it so that we can refer to the
+                    // array and read values out that have already been created.
+                    ReadOnlyCollectionBuilder<Expression> assigns = new ReadOnlyCollectionBuilder<Expression>(_constants.Count + 2);
+                    assigns.Add(Expression.Assign(
                         _constantPool,
-                        Expression.NewArrayInit(typeof(object), _constants)
-                    );
+                        Expression.NewArrayBounds(typeof(object), Expression.Constant(_constants.Count))
+                    ));
+
+                    // emit inner most constants first so they're available for outer most constants to consume
+                    for (int i = _constants.Count - 1; i >= 0 ; i--) {
+                        assigns.Add(
+                            Expression.Assign(
+                                Expression.ArrayAccess(_constantPool, Expression.Constant(i)),
+                                _constants[i]
+                            )
+                        );
+                    }
+                    assigns.Add(body);
+
+                    body = Expression.Block(new[] { _constantPool }, assigns);
                 }
 
                 // Rewrite the lambda
@@ -195,17 +210,29 @@ namespace Microsoft.Scripting.Generation {
             // We need to replace a transient delegateType with one stored in
             // the assembly we're saving to disk.
             //
+            // When the delegateType is a function that accepts 14 or more parameters,
+            // it is transient, but it is an InternalModuleBuilder, not a ModuleBuilder
+            // so some reflection is done here to determine if a delegateType is an
+            // InternalModuleBuilder and if it is, if it is transient.
+            //
             // One complication:
             // SaveAssemblies mode prevents us from detecting the module as
             // transient. If that option is turned on, always replace delegates
             // that live in another AssemblyBuilder
 
             var module = delegateType.Module as ModuleBuilder;
-            if (module == null) {
-                return false;
-            }
 
-            if (module.IsTransient()) {
+            if (module == null) {
+                if (delegateType.Module.GetType() == typeof(ModuleBuilder).Assembly.GetType("System.Reflection.Emit.InternalModuleBuilder")) {
+                    if ((bool)delegateType.Module.GetType().InvokeMember("IsTransientInternal", BindingFlags.InvokeMethod | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance, null, delegateType.Module, null)) {
+                        return true;
+                    }
+                }
+                else {
+                    return false;
+                }
+            }
+            else if (module.IsTransient()) {
                 return true;
             }
 

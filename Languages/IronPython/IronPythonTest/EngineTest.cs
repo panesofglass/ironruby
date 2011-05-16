@@ -2642,8 +2642,6 @@ if id(a) == id(b):
         }
 
         private static Action<PythonDictionary> VerifyNoKeys(int value) {
-            string key = new string((char)(65 + value), 1);
-
             return (dict) => {
                 AreEqual(dict.Count, 0);
             };
@@ -2803,4 +2801,17 @@ if r.sum != 110:
             return 42;
         }
     }
+
+    public class GenericProperty<T> {
+        private T _value;
+        public T Value {
+            get {
+                return this._value;
+            }
+            set {
+                this._value = value;
+            }
+        }
+    }
+
 }

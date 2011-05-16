@@ -32,6 +32,7 @@ namespace IronPython.Modules {
         public const string __doc__ = "Provides low level primitives for threading.";
 
         private static readonly object _stackSizeKey = new object();
+        private static object _threadCountKey = new object();
 
         [SpecialName]
         public static void PerformModuleReload(PythonContext/*!*/ context, PythonDictionary/*!*/ dict) {
@@ -67,9 +68,18 @@ namespace IronPython.Modules {
             return t.ManagedThreadId;
         }
 
-        public static void interrupt_main() {
-            throw PythonOps.NotImplementedError("interrupt_main not implemented");
-            //throw new PythonKeyboardInterrupt();
+        /// <summary>
+        /// Stops execution of Python or other .NET code on the main thread.  If the thread is
+        /// blocked in native code the thread will be interrupted after it returns back to Python
+        /// or other .NET code.  
+        /// </summary>
+        public static void interrupt_main(CodeContext context) {
+            var thread = context.LanguageContext.MainThread;
+            if (thread != null) {
+                thread.Abort(new KeyboardInterruptException(""));
+            } else {
+                throw PythonOps.SystemError("no main thread has been registered");
+            }
         }
 
         public static void exit() {
@@ -113,6 +123,10 @@ namespace IronPython.Modules {
 
         public static object allocate() {
             return allocate_lock();
+        }
+
+        public static int _count(CodeContext context) {
+            return (int)context.LanguageContext.GetOrCreateModuleState<object>(_threadCountKey, () => 0);
         }
 
         #endregion
@@ -207,18 +221,29 @@ namespace IronPython.Modules {
             }
 
             public void Start() {
+                lock (_threadCountKey) {
+                    int startCount = (int)_context.LanguageContext.GetOrCreateModuleState<object>(_threadCountKey, () => 0);
+                    _context.LanguageContext.SetModuleState(_threadCountKey, startCount + 1);
+                }
                 try {
+#pragma warning disable 618 // TODO: obsolete
                     if (_kwargs != null) {
                         PythonOps.CallWithArgsTupleAndKeywordDictAndContext(_context, _func, ArrayUtils.EmptyObjects, ArrayUtils.EmptyStrings, _args, _kwargs);
                     } else {
                         PythonOps.CallWithArgsTuple(_func, ArrayUtils.EmptyObjects, _args);
                     }
+#pragma warning restore 618
                 } catch (SystemExitException) {
                     // ignore and quit
                 } catch (Exception e) {
                     PythonOps.PrintWithDest(_context, PythonContext.GetContext(_context).SystemStandardError, "Unhandled exception on thread");
                     string result = _context.LanguageContext.FormatException(e);
                     PythonOps.PrintWithDest(_context, PythonContext.GetContext(_context).SystemStandardError, result);
+                } finally {
+                    lock (_threadCountKey) {
+                        int curCount = (int)_context.LanguageContext.GetModuleState(_threadCountKey);
+                        _context.LanguageContext.SetModuleState(_threadCountKey, curCount - 1);
+                    }
                 }
             }
         }

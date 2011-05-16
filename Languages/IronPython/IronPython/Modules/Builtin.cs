@@ -283,18 +283,23 @@ namespace IronPython.Modules {
                 throw PythonOps.TypeError("compile() expected string without null bytes");
             }
 
+            bool astOnly = false;
+            int iflags = flags != null ? Converter.ConvertToInt32(flags) : 0;
+            if ((iflags & _ast.PyCF_ONLY_AST) != 0) {
+                astOnly = true;
+                iflags &= ~_ast.PyCF_ONLY_AST;
+            }
+
             source = RemoveBom(source);
 
             bool inheritContext = GetCompilerInheritance(dont_inherit);
-            CompileFlags cflags = GetCompilerFlags(flags);
+            CompileFlags cflags = GetCompilerFlags(iflags);
             PythonCompilerOptions opts = GetRuntimeGeneratedCodeCompilerOptions(context, inheritContext, cflags);
             if ((cflags & CompileFlags.CO_DONT_IMPLY_DEDENT) != 0) {
                 opts.DontImplyDedent = true;
             }
 
             SourceUnit sourceUnit;
-            string unitPath = String.IsNullOrEmpty(filename) ? null : filename;
-
             switch (mode) {
                 case "exec": sourceUnit = context.LanguageContext.CreateSnippet(source, filename, SourceCodeKind.Statements); break;
                 case "eval": sourceUnit = context.LanguageContext.CreateSnippet(source, filename, SourceCodeKind.Expression); break;
@@ -303,7 +308,9 @@ namespace IronPython.Modules {
                     throw PythonOps.ValueError("compile() arg 3 must be 'exec' or 'eval' or 'single'");
             }
 
-            return FunctionCode.FromSourceUnit(sourceUnit, opts, true);
+            return !astOnly ? 
+                (object)FunctionCode.FromSourceUnit(sourceUnit, opts, true) :
+                (object)_ast.BuildAst(context, sourceUnit, opts, mode);
         }
 
         private static string RemoveBom(string source) {
@@ -2079,8 +2086,6 @@ namespace IronPython.Modules {
             }
 
             var sumState = new SumState(context.LanguageContext, start);
-            object ret = start;
-            
             while (i.MoveNext()) {
                 SumOne(ref sumState, i.Current);
             }
@@ -2386,14 +2391,11 @@ namespace IronPython.Modules {
         }
 
         /// <summary> Returns the default compiler flags or the flags the user specified. </summary>
-        private static CompileFlags GetCompilerFlags(object flags) {
-            CompileFlags cflags = 0;
-            if (flags != null) {
-                cflags = (CompileFlags)Converter.ConvertToInt32(flags);
-                if ((cflags & ~(CompileFlags.CO_NESTED | CompileFlags.CO_GENERATOR_ALLOWED | CompileFlags.CO_FUTURE_DIVISION | CompileFlags.CO_DONT_IMPLY_DEDENT | 
-                    CompileFlags.CO_FUTURE_ABSOLUTE_IMPORT | CompileFlags.CO_FUTURE_WITH_STATEMENT)) != 0) {
-                    throw PythonOps.ValueError("unrecognized flags");
-                }
+        private static CompileFlags GetCompilerFlags(int flags) {
+            CompileFlags cflags = (CompileFlags)flags;
+            if ((cflags & ~(CompileFlags.CO_NESTED | CompileFlags.CO_GENERATOR_ALLOWED | CompileFlags.CO_FUTURE_DIVISION | CompileFlags.CO_DONT_IMPLY_DEDENT | 
+                CompileFlags.CO_FUTURE_ABSOLUTE_IMPORT | CompileFlags.CO_FUTURE_WITH_STATEMENT)) != 0) {
+                throw PythonOps.ValueError("unrecognized flags");
             }
 
             return cflags;

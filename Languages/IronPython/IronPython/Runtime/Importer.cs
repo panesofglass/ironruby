@@ -267,12 +267,6 @@ namespace IronPython.Runtime {
                 }
             }
 
-            // avoid allocating a bunch of strings if we can...
-            object ret;
-            if (bottom && TryGetExistingModule(context, modName, out ret)) {
-                return ret;
-            }
-
             // now import the a.b.c etc.  a needs to be included here
             // because the process of importing could have modified
             // sys.modules.
@@ -925,20 +919,20 @@ namespace IronPython.Runtime {
             // in Silverlight becauase there's no way to get the original filename.
 
             PlatformAdaptationLayer pal = context.DomainManager.Platform;
-            string dir = Path.GetDirectoryName(path);
+            string dir = pal.GetDirectoryName(path);
             if (!pal.DirectoryExists(dir)) {
                 return null;
             }
 
             try {
-                string file = Path.GetFileName(path);
+                string file = pal.GetFileName(path);
                 string[] files = pal.GetFileSystemEntries(dir, file, !isDir, isDir);
 
-                if (files.Length != 1 || Path.GetFileName(files[0]) != file) {
+                if (files.Length != 1 || pal.GetFileName(files[0]) != file) {
                     return null;
                 }
 
-                return Path.GetFullPath(files[0]);
+                return pal.GetFullPath(files[0]);
             } catch (IOException) {
                 return null;
             }

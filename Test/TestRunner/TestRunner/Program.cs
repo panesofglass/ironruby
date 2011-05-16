@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -12,7 +12,7 @@ namespace TestRunner {
     class Program {
         private bool _verbose, _runLongRunning, _admin, _quiet;
         private int _threadCount = 6;
-        private List<TestResult> _failures = new List<TestResult>();
+        private List<TestResult> _results = new List<TestResult>();
 
         static int Main(string[] args) {
             return new Program().MainBody(args);
@@ -38,6 +38,7 @@ namespace TestRunner {
             // Default to debug binaries
             string binPath = Path.Combine(dlrRoot, "bin\\Debug");
             bool runAll = false;
+            string nunitOutputPath = null;
 
             // parse the options
             for (int i = 0; i < args.Length; i++) {
@@ -46,7 +47,11 @@ namespace TestRunner {
                 } else if (args[i].StartsWith("/test:")) {
                     tests.Add(args[i].Substring("/test:".Length));
                 } else if (args[i].StartsWith("/binpath:")) {
-                    binPath = Path.Combine(dlrRoot, args[i].Substring("/binpath".Length));
+                    binPath = Path.Combine(dlrRoot, args[i].Substring("/binpath:".Length));
+                }
+                else if (args[i].StartsWith("/nunitoutput:"))
+                {
+                    nunitOutputPath = args[i].Substring("/nunitoutput:".Length);
                 } else if (args[i] == "/verbose") {
                     _verbose = true;
                 } else if (args[i] == "/runlong") {
@@ -57,8 +62,8 @@ namespace TestRunner {
                     _quiet = true;
                 } else if (args[i].StartsWith("/threads:")) {
                     int threadCount;
-                    if (!Int32.TryParse(args[i].Substring("/threads".Length), out threadCount) || threadCount <= 0) {
-                        Console.WriteLine("Bad thread count: {0}", args[i].Substring("/threads".Length));
+                    if (!Int32.TryParse(args[i].Substring("/threads:".Length), out threadCount) || threadCount <= 0) {
+                        Console.WriteLine("Bad thread count: {0}", args[i].Substring("/threads:".Length));
                         return -1;
                     }
                     _threadCount = threadCount; 
@@ -155,12 +160,14 @@ namespace TestRunner {
                 RunTestForConsole(test);
             }
 
-            if (_failures.Count > 0) {
+            var failures = _results.Where(r => r.IsFailure).ToList();
+
+            if (failures.Count > 0) {
                 if (_verbose) {
                     Console.ForegroundColor = ConsoleColor.Red;
                     Console.WriteLine("Failed test output:");
                     Console.ForegroundColor = ConsoleColor.Gray;
-                    foreach (var failedTest in _failures) {
+                    foreach (var failedTest in failures) {
                         Console.ForegroundColor = ConsoleColor.White;
                         Console.WriteLine(failedTest.Test.Name);
                         Console.ForegroundColor = ConsoleColor.Gray;
@@ -174,16 +181,24 @@ namespace TestRunner {
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine("Failed test summary:");
                 Console.ForegroundColor = ConsoleColor.Gray;
-                foreach (var failedTest in _failures) {
+                foreach (var failedTest in failures) {
                     Console.WriteLine(failedTest.Test.Name);
                 }
             }
 
-            Console.WriteLine("Total time: {0} seconds", (DateTime.Now - start).TotalSeconds);
+            var elapsedTime = (DateTime.Now - start);
+            if (!string.IsNullOrWhiteSpace(nunitOutputPath))
+            {
+                var resultsWriter = new NUnitResultsWriter(_results, inputFiles.First(), elapsedTime);
+                resultsWriter.Save(nunitOutputPath);
+            }
+
+
+            Console.WriteLine("Total time: {0} seconds", elapsedTime.TotalSeconds);
 
             Console.ForegroundColor = originalColor;
 
-            return _failures.Count;
+            return failures.Count;
         }
 
         private void RunTestForConsole(Test test) {
@@ -221,9 +236,11 @@ namespace TestRunner {
                     Console.WriteLine(result.EllapsedSeconds);
                 }
 
-                if (result.Status == TestResultStatus.Failed || result.Status == TestResultStatus.TimedOut) {
+                if (result.IsFailure) {
                     DisplayFailure(test, result);
                 }
+
+                _results.Add(result);
             }
         }
 
@@ -244,7 +261,6 @@ namespace TestRunner {
                     Console.WriteLine("> {0}", line);
                 }
             }
-            _failures.Add(result);
         }
 
         /// <summary>
@@ -358,7 +374,7 @@ namespace TestRunner {
 
         private static void Help() {
             Console.WriteLine("Usage: ");
-            Console.WriteLine("TestRunner.exe (inputFile ...) [/threads:6] [/quiet] [/admin] [/binpath:dir] [/runlong] [/verbose] (/all | ([/category:CatName] | [/test:testName])+)");
+            Console.WriteLine("TestRunner.exe (inputFile ...) [/threads:6] [/quiet] [/admin] [/binpath:dir] [/runlong] [/verbose] [/nunitoutput:file] (/all | ([/category:CatName] | [/test:testName])+)");
         }
     }
 }

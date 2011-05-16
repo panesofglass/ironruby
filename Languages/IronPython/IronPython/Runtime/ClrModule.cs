@@ -474,7 +474,7 @@ import Namespace.")]
             if (file == null) throw PythonOps.TypeError("Expected string, got NoneType");
 
             // update our path w/ the path of this file...
-            string path = System.IO.Path.GetDirectoryName(file);
+            string path = System.IO.Path.GetDirectoryName(Path.GetFullPath(file));
             List list;
 
             PythonContext pc = PythonContext.GetContext(context);
@@ -804,7 +804,7 @@ import Namespace.")]
             PythonContext pc = PythonContext.GetContext(context);
 
             for (int i = 0; i < filenames.Length; i++) {
-                filenames[i] = Path.GetFullPath(filenames[i]);
+                filenames[i] = pc.DomainManager.Platform.GetFullPath(filenames[i]);
             }
 
             Dictionary<string, string> packageMap = BuildPackageMap(filenames);
